@@ -1,0 +1,456 @@
+/* popup.css — Material/Google 風格 card-based UI（與 api-monitor 一致）*/
+
+:root {
+  --bg:         #1F1F1F;
+  --bg-card:    #2D2E30;
+  --bg-input:   #1F1F1F;
+  --bg-hover:   rgba(232, 234, 237, 0.06);
+  --text:       #E8EAED;
+  --text-dim:   #9AA0A6;
+  --text-faint: #5F6368;
+  --divider:    #3C4043;
+  --accent:     #8AB4F8;
+  --accent-bg:  rgba(138, 180, 248, 0.12);
+  --good:       #81C995;
+  --warn:       #FDD663;
+  --danger:     #F28B82;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0;
+  width: 340px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Google Sans', 'Roboto', 'Arial', -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ─── Header ─────────────────────────────────── */
+.master-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--divider);
+}
+
+h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* slider toggle（保留 iOS 風）*/
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+.switch-track {
+  position: relative;
+  display: inline-block;
+  width: 34px;
+  height: 18px;
+  background: var(--divider);
+  border-radius: 999px;
+  transition: background 0.2s;
+  flex: 0 0 auto;
+}
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+.switch input:checked ~ .switch-track {
+  background: var(--accent);
+}
+.switch input:checked ~ .switch-track .switch-thumb {
+  transform: translateX(16px);
+  background: #fff;
+}
+.switch input:focus-visible ~ .switch-track {
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.4);
+}
+.switch-text {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.switch input:checked ~ .switch-text { color: var(--text); }
+
+body.disabled .group { opacity: 0.55; }
+
+/* ─── Cards（與 api-monitor 對齊）──────────── */
+.group {
+  margin: 10px 14px;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border-radius: 8px;
+}
+
+.group h4 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* PT 額外視圖區塊 — 用左藍邊與微微藍底區隔 */
+.group-pt {
+  border-left: 3px solid #669DF1;
+  padding-left: 12px;
+}
+.group-pt h4 { color: #88B4F4; }
+.group-hint {
+  margin: -4px 0 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.group-pt .group-hint b { color: #B6C2CF; font-weight: 500; }
+
+/* 互斥 disabled 狀態 — 整個 section 變淡，互動禁止 */
+.group.disabled,
+.row.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+/* 主視圖 .group-hint 內的 small 比較淡 */
+.group-hint small { color: var(--text-dim); font-size: 11px; }
+
+/* ─── 模式區塊 header ────────────────────── */
+.mode-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -2px 0 6px;
+}
+.mode-header h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #B6C2CF;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+.mode-badge-a { background: #4688EC; }   /* 主視圖 — 藍 */
+.mode-badge-b { background: #FF8E40; }   /* PT — 橘 */
+
+/* mode 之間「或」分隔線 */
+.mode-divider {
+  display: flex;
+  align-items: center;
+  margin: 6px 24px;
+  color: var(--text-dim);
+  font-size: 11px;
+  gap: 8px;
+}
+.mode-divider::before,
+.mode-divider::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.10);
+}
+.mode-divider span {
+  padding: 0 4px;
+  background: var(--bg);
+}
+
+/* mode-extra：附加選項（如「同時顯示 PT 並行」），跟主清單拉開距離 */
+.mode-extra {
+  margin-top: 8px !important;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+.mode-extra small { display: block; margin-top: 2px; }
+
+/* 校準區：cap 輸入框旁的單位提示 */
+.cap-unit { margin-left: 6px; color: var(--text-dim); font-size: 11px; }
+.cap-impact { font-size: 11px; line-height: 1.5; }
+.cap-impact small { color: var(--text-dim); }
+
+/* 部門名單區 */
+.roster-controls { gap: 8px; }
+.last-refresh { color: var(--text-dim); font-size: 11px; }
+.roster-status-line {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.roster-info { margin-top: 8px; }
+.roster-info summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 4px 0;
+  user-select: none;
+}
+.roster-info summary:hover { color: var(--text); }
+.roster-info[open] summary { color: var(--text); margin-bottom: 4px; }
+.roster-map {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.roster-map td {
+  padding: 3px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.roster-map .role-col { color: #88B4F4; font-family: ui-monospace, monospace; width: 80px; }
+.roster-map .arrow-col { color: var(--text-dim); width: 20px; }
+
+/* ─── Row ─────────────────────────────────── */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  min-height: 26px;
+}
+.row:last-child { margin-bottom: 0; }
+
+.row > label {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.ctl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+input[type="color"] {
+  width: 36px;
+  height: 26px;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  background: var(--bg-input);
+  cursor: pointer;
+  padding: 2px;
+}
+
+input.hex {
+  width: 86px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: 'Roboto Mono', ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  text-transform: lowercase;
+  transition: border-color 0.15s;
+}
+input.hex:focus,
+input[type="color"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* ─── Checkbox row ────────────────────────── */
+.checkbox-row {
+  margin-bottom: 8px;
+}
+.checkbox-row label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  padding: 4px 0;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+.checkbox-row label:hover {
+  background: var(--bg-hover);
+}
+
+input[type="checkbox"] {
+  margin: 1px 0 0;
+  cursor: pointer;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  appearance: none;
+  background: transparent;
+  border: 2px solid var(--text-dim);
+  border-radius: 3px;
+  position: relative;
+  transition: background 0.1s, border-color 0.1s;
+}
+input[type="checkbox"]:hover { border-color: var(--text); }
+input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--bg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ─── 摺疊式說明 ──────────────────────────── */
+details.info {
+  margin-top: 10px;
+  border-top: 1px solid var(--divider);
+  padding-top: 8px;
+}
+details.info > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 0;
+  transition: color 0.1s;
+}
+details.info > summary:hover { color: var(--text); }
+details.info > summary::-webkit-details-marker { display: none; }
+details.info > summary::before {
+  content: "ⓘ";
+  font-size: 13px;
+  text-transform: none;
+  color: var(--text-dim);
+}
+details.info[open] > summary { color: var(--text); }
+details.info[open] > summary::before { color: var(--accent); }
+
+details.info > .info-body {
+  margin-top: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  background: var(--bg);
+  border-radius: 6px;
+}
+
+/* ─── Footer ────────────────────────────── */
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--divider);
+}
+
+button {
+  border-radius: 999px;
+  padding: 7px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--divider);
+  background: transparent;
+  color: var(--text-dim);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+button:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.3);
+}
+
+.btn-primary {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-primary:hover {
+  background: rgba(138, 180, 248, 0.18);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.status {
+  font-size: 12px;
+  color: var(--good);
+  opacity: 0;
+  transition: opacity 0.2s;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+.status::before {
+  content: "✓";
+  font-weight: 600;
+}
+.status.show { opacity: 1; }
+
+.hint {
+  margin: 0;
+  padding: 12px 16px 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  text-align: center;
+}

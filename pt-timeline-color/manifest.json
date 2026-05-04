@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Jira PT Timeline Color",
+  "version": "0.6.1",
+  "description": "在 Jira Timeline 將 Planning Task / Milestone 的時間軸條塊染上區別色，可自訂顏色與 Milestone 顯示為菱形",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://*.atlassian.net/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Jira PT Timeline Color 設定",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.atlassian.net/*"],
+      "js": ["jiraApi.js", "holidays_tw.js", "floating_toolbar.js", "timeline_color.js"],
+      "css": ["timeline_color.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

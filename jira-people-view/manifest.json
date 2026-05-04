@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Jira People View",
+  "version": "0.3.1",
+  "description": "Jira Timeline 人力視圖：以人為主軸的工作量 heatmap，展開可看每人任務排程",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://*.atlassian.net/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Jira People View 設定",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.atlassian.net/*"],
+      "js": ["jiraApi.js", "teams.js", "data.js", "render.js", "content.js"],
+      "css": ["modal.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

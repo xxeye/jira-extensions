@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>Jira People View 設定</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="master-row">
+    <h3>Jira People View 設定</h3>
+    <p class="subhead">下方兩種視角擇一使用</p>
+  </div>
+
+  <!-- ── 視角 A：職種（以人為主軸）──────────────── -->
+  <section class="group group-mode" id="types-section">
+    <div class="mode-header">
+      <span class="mode-badge mode-badge-a">A</span>
+      <h4>職種視角 — 以人為主軸</h4>
+    </div>
+    <p class="group-hint">勾選想看的職種任務類型；每位部門成員一條 heatmap，依工作量降冪排序</p>
+    <div id="types-list"></div>
+
+    <label class="row checkbox-row mode-extra" id="show-pt-load-row">
+      <input type="checkbox" id="show-pt-load">
+      <span>頂部加掛「Planning Task 並行」對比 bar
+        <small>（PT 依勾選職種對應 cf[10773] 過濾）</small>
+      </span>
+    </label>
+  </section>
+
+  <div class="mode-divider"><span>或</span></div>
+
+  <!-- ── 視角 B：PT（以職種為主軸）─────────────── -->
+  <section class="group group-mode group-pt" id="pt-section">
+    <div class="mode-header">
+      <span class="mode-badge mode-badge-b">B</span>
+      <h4>Planning Task 視角 — 以職種為主軸</h4>
+    </div>
+    <p class="group-hint">PT 依 cf[10773] 分組成職種列；勾選後切到 PT 專用視圖（與 A 互斥）</p>
+    <div id="pt-list"></div>
+  </section>
+
+  <!-- ── 部門名單 / Atlassian Teams 整合 ───────────── -->
+  <section class="group group-roster" id="roster-section">
+    <h4>👥 部門成員名單</h4>
+    <p class="group-hint">補完「沒派任務的成員」，繁忙人數統計才完整。<br>
+      名單從 Atlassian Teams 抓，第一次自動抓 + 快取，平常不會重抓。</p>
+    <div class="row roster-controls">
+      <button id="refresh-teams" class="btn-secondary">重抓部門名單</button>
+      <span class="last-refresh" id="last-refresh"></span>
+    </div>
+    <div class="roster-status-line" id="roster-status"></div>
+    <details class="roster-info">
+      <summary>對照表：cf[10773] 職種 → Atlassian Team</summary>
+      <table class="roster-map" id="roster-map"></table>
+    </details>
+  </section>
+
+  <!-- ── 校準 ───────────────────────────────────── -->
+  <section class="group group-cap">
+    <h4>⚙️ Heatmap 校準</h4>
+    <p class="group-hint">「一個人同時做幾個任務算滿載」的基準值</p>
+    <div class="row">
+      <label for="cap">個人滿載 =</label>
+      <div class="ctl">
+        <input type="number" id="cap" class="hex" min="1" max="20" step="1" style="width:60px">
+        <span class="cap-unit">個任務</span>
+      </div>
+    </div>
+    <p class="group-hint cap-impact">
+      影響：個人列色階、職種任務並行 bar 容量（= cap × 人數）、Planning Task 高峰警示閾值<br>
+      <small>※ Planning Task 並行 bar 採動態 cap，不受此值影響</small>
+    </p>
+  </section>
+
+  <div class="footer">
+    <button id="select-all" class="btn-secondary" title="勾選 A 視角的所有任務類型">A 視角全選</button>
+    <button id="select-none" class="btn-secondary" title="清空所有勾選">全部取消</button>
+    <span class="status" id="status">已儲存</span>
+  </div>
+
+  <p class="hint">設定即時儲存。到 Jira Timeline 頁面點右下角「人力視圖」按鈕開啟。</p>
+
+  <script src="teams.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

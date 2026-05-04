@@ -1,0 +1,349 @@
+/* timeline_color.css — Planning Task / Milestone 條塊著色
+ *
+ * 顏色由 popup.html 寫入 chrome.storage.sync，content script 將值
+ * 套到 :root 的 CSS 變數。預設值（fallback）一併寫在這裡。
+ */
+
+:root {
+  --jpt-pt-color: #6a9a23;
+  --jpt-ms-color: #FF8B00;
+}
+
+/* Planning Task bar */
+.jpt-pt-bar {
+  background-color: var(--jpt-pt-color) !important;
+  background-image: none !important;
+}
+
+/* Milestone bar — 普通模式（橫向長條）*/
+.jpt-ms-bar {
+  background-color: var(--jpt-ms-color) !important;
+  background-image: none !important;
+}
+
+/* Milestone bar — 鎖定前後拉長：禁用左右 resize handles
+ * Jira 在 hover 時於 bar 兩端疊上 col-resize handle（12px），
+ * 這裡只把它們的 pointer-events 拿掉（仍渲染但不可拖），
+ * 中間 bar body 還是可以整塊拖移。
+ *
+ * 兩種觸發來源：
+ *   1. 使用者勾選「鎖定前後拉長」→ body.jpt-ms-lock-edges
+ *   2. 啟用菱形模式 → bar 直接帶 .jpt-ms-diamond（拉伸已無意義）
+ */
+body.jpt-ms-lock-edges .jpt-ms-bar [data-testid*="left-draggable-handle-"],
+body.jpt-ms-lock-edges .jpt-ms-bar [data-testid*="right-draggable-handle-"],
+.jpt-ms-bar.jpt-ms-diamond [data-testid*="left-draggable-handle-"],
+.jpt-ms-bar.jpt-ms-diamond [data-testid*="right-draggable-handle-"] {
+  pointer-events: none !important;
+  cursor: pointer !important;
+}
+
+/* Milestone bar — 菱形模式（在 due 時間點繪一個菱形）
+ * 注意：
+ *   - 用 opacity:0 而非 visibility:hidden — 後者會讓子元素失去 click handler，
+ *     導致點擊菱形無法開側邊欄。
+ *   - 只 hide 第一個直接子 [role="button"]（可見 bar 本體），
+ *     不動第二個子（hover 時的日期標籤容器），這樣 hover 才看得到日期。
+ */
+.jpt-ms-bar.jpt-ms-diamond {
+  background-color: transparent !important;
+  background-image: none !important;
+  overflow: visible !important;
+}
+.jpt-ms-bar.jpt-ms-diamond > [role="button"] {
+  opacity: 0 !important;
+}
+.jpt-ms-bar.jpt-ms-diamond::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  background-color: var(--jpt-ms-color);
+  transform: translateY(-50%) rotate(45deg);
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  pointer-events: none;  /* 點擊穿透到 bar 子元素，觸發 Jira 開側邊欄 */
+}
+
+/* Milestone 進度 badge — relates to 任務完成度 */
+.jpt-ms-progress {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Roboto Mono', ui-monospace, Consolas, monospace;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+  z-index: 1;
+}
+.jpt-ms-progress-done { background: rgba(75, 206, 151, 0.18); color: #4BCE97; }
+.jpt-ms-progress-mid  { background: rgba(87, 157, 255, 0.18); color: #87B5FF; }
+.jpt-ms-progress-low  { background: rgba(247, 201, 72, 0.18); color: #F5CD47; }
+.jpt-ms-progress-zero { background: rgba(140, 155, 171, 0.18); color: #8C9BAB; }
+
+/* 菱形模式時 badge 要再往右偏一點（避開菱形）*/
+.jpt-ms-bar.jpt-ms-diamond .jpt-ms-progress {
+  margin-left: 14px;
+}
+
+/* 菱形模式：隱藏「開始日」標籤（左側 SMALL）— 里程碑是時間點，重複顯示無意義
+ * 只留結束日。「(N 天)」時長後綴用 JS 從文字內砍掉（CSS 沒辦法部分隱藏文字）。
+ */
+.jpt-ms-bar.jpt-ms-diamond small:first-of-type {
+  display: none !important;
+}
+
+/* 相依性線視覺優化 — 不隱藏，只讓畫面整齊一點
+ * Jira 原生：stroke #7D818A、寬 2px、bezier 曲線，多條時容易交錯成一團
+ * 改為：細一階（1px）、半透明（30%）、平滑渲染 → 多條疊起來雜訊少很多
+ * 同時拔掉 interactive-path 的 pointer-events，讓「檢視相依性詳細資料」hover 不再跳出
+ */
+body.jpt-active .dependencies-overlay path[data-testid$=".line.dependency-line"] {
+  stroke-width: 1 !important;
+  opacity: 0.45 !important;
+  shape-rendering: geometricPrecision;
+  vector-effect: non-scaling-stroke;
+}
+body.jpt-active .dependencies-overlay path[data-testid$=".line.interactive-path"] {
+  pointer-events: none !important;
+  cursor: default !important;
+}
+
+/* Epic 無起訖日期 — 透明填充 + outline 虛線框
+ * 用 outline 而非 border：不參與 layout，渲染最便宜。
+ */
+.jpt-epic-no-dates {
+  background-color: transparent !important;
+  background-image: none !important;
+  outline: 1.5px dashed rgba(190, 140, 220, 0.85) !important;
+  outline-offset: -2px !important;
+}
+
+/* 隱藏 Jira Timeline 當月份高亮欄（保留今天藍線 today-marker）
+ * Jira UI 用 ._1kl7ia51._1s7zia51 標記目前月份的 column overlay。
+ * 這對 Atlassian compiled-css 哈希在版本更新時可能變動，必要時須更新選擇器。
+ */
+body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
+  display: none !important;
+}
+
+/* 週末 / 國定假日 strip — 由 timeline_color.js 動態插入到 today-marker 的 parent
+ * 用 absolute 定位 + pointer-events:none，不影響 Jira 互動。
+ */
+.jpt-cal-strip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.jpt-cal-strip.jpt-cal-weekend {
+  background-color: rgba(200, 200, 200, 0.05);
+}
+.jpt-cal-strip.jpt-cal-holiday {
+  background-color: rgba(255, 140, 80, 0.10);
+}
+
+/* 專注模式：透過操作 Jira 內建 Epic 快速篩選達成（不需 CSS 隱藏） */
+
+/* ─── 浮動 Toolbar（啟用 toggle + 重新整理）─────────────────
+   樣式對齊 jira-people-view 浮動鈕 + Jira ADS 設計 token */
+#jpt-toolbar {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9998;
+  display: inline-flex;
+  align-items: stretch;
+  background: #2C333A;
+  border: 1px solid rgba(166, 174, 184, 0.10);
+  border-radius: 3px;
+  font-family: 'Atlassian Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #B6C2CF;
+  user-select: none;
+  transition: box-shadow 0.15s;
+  overflow: hidden;
+}
+#jpt-toolbar.dragging {
+  box-shadow: 0 6px 28px rgba(102, 157, 241, 0.4);
+  opacity: 0.9;
+}
+
+/* 拖曳手把 — 唯一可拖曳的區塊（其餘區塊只負責 click）*/
+.jpt-tb-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  font-size: 14px;
+  color: #5C6168;
+  cursor: grab;
+  transition: color 0.15s, background 0.15s;
+}
+.jpt-tb-handle:hover {
+  color: #B6C2CF;
+  background: rgba(255, 255, 255, 0.04);
+}
+#jpt-toolbar.dragging .jpt-tb-handle { cursor: grabbing; color: #B6C2CF; }
+.jpt-tb-seg {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.jpt-tb-seg:hover { background: #38414A; color: #CECFD2; }
+.jpt-tb-divider {
+  width: 1px;
+  background: rgba(166, 174, 184, 0.15);
+}
+.jpt-tb-icon {
+  padding: 6px 10px;
+  font-size: 16px;
+}
+.jpt-tb-refresh-ico {
+  display: inline-block;
+  font-size: 16px;
+  line-height: 1;
+}
+.jpt-tb-seg:active .jpt-tb-refresh-ico {
+  transform: rotate(180deg);
+  transition: transform 0.3s;
+}
+
+/* 啟用狀態指示燈 */
+.jpt-tb-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+  background: #5A5A5E;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+#jpt-toolbar.jpt-tb-on .jpt-tb-dot {
+  background: #4BCE97;
+  box-shadow: 0 0 6px rgba(75, 206, 151, 0.5);
+}
+#jpt-toolbar.jpt-tb-off .jpt-tb-label { color: #96999E; }
+
+/* ─── Hover tooltip：bar 滑入顯示職種 / Milestone relates 任務 ─── */
+#jpt-hover-tip {
+  position: fixed;
+  z-index: 9990;       /* 略低於 toolbar，但仍能蓋過 timeline；別蓋過 modal/dropdown */
+  background: #282A2E;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 3px;
+  padding: 0;
+  font-family: 'Atlassian Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: #CECFD2;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+.jpt-hover-tip-pt { max-width: 360px; padding: 6px 10px; width: auto; }
+.jpt-hover-tip-ms { min-width: 280px; max-width: 480px; max-height: 60vh; overflow-y: auto; }
+
+.jpt-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.jpt-tip-label {
+  font-size: 11px;
+  color: #96999E;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.jpt-tip-roles {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.jpt-tip-role-chip {
+  display: inline-block;
+  background: rgba(150, 207, 117, 0.18);
+  color: #B7E089;
+  border-radius: 3px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.jpt-tip-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 12px;
+  background: #282A2E;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+.jpt-tip-body { padding: 6px 12px 8px; }
+.jpt-tip-item {
+  display: flex;
+  align-items: baseline;
+  padding: 3px 0;
+  white-space: nowrap;
+}
+.jpt-tip-status {
+  flex: 0 0 auto;
+  width: 14px;
+  text-align: center;
+  margin-right: 6px;
+  color: #96999E;
+}
+.jpt-tip-done .jpt-tip-status { color: #4BCE97; }
+.jpt-tip-indeterminate .jpt-tip-status { color: #579DFF; }
+.jpt-tip-key {
+  flex: 0 0 auto;
+  color: #6CC3E0;
+  font-weight: 500;
+  margin-right: 8px;
+}
+.jpt-tip-summary {
+  color: #CECFD2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jpt-tip-done .jpt-tip-key,
+.jpt-tip-done .jpt-tip-summary { color: #96999E; text-decoration: line-through; }
+
+/* 自訂捲軸 */
+#jpt-hover-tip::-webkit-scrollbar { width: 8px; }
+#jpt-hover-tip::-webkit-scrollbar-track { background: transparent; }
+#jpt-hover-tip::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
+#jpt-hover-tip::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+/* 短暫狀態提示（重新整理後浮動字）*/
+.jpt-tb-flash {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #282A2E;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 3px;
+  padding: 4px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.jpt-tb-flash.show { opacity: 1; }
+.jpt-tb-flash-ok { color: #4BCE97; }
+.jpt-tb-flash-warn { color: #F5CD47; border-color: rgba(245, 205, 71, 0.40); }
+

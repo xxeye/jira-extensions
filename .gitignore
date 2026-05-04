@@ -1,0 +1,15 @@
+# Obsidian workspace
+.obsidian/
+
+# Excluded plugins
+api-monitor/
+template-expander/
+
+# AI 入口（本地開發用，不上 git）
+CLAUDE.md
+
+# 本地打包產物（zip 走 GitHub Releases，不上 repo）
+*.zip
+
+# Confluence 內部版文件（給內部員工，不上公開 repo）
+docs/confluence/

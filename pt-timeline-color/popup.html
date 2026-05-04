@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>Jira PT Timeline Color 設定</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="master-row">
+    <h3>Timeline 條塊樣式</h3>
+  </div>
+
+  <!-- ─── Planning Task ─── -->
+  <section class="group">
+    <h4>Planning Task</h4>
+    <div class="row">
+      <label for="pt-color">顏色</label>
+      <div class="ctl">
+        <input type="color" id="pt-color">
+        <input type="text" id="pt-color-text" class="hex" maxlength="7" placeholder="#6a9a23">
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Milestone ─── -->
+  <section class="group">
+    <h4>Milestone</h4>
+    <div class="row">
+      <label for="ms-color">顏色</label>
+      <div class="ctl">
+        <input type="color" id="ms-color">
+        <input type="text" id="ms-color-text" class="hex" maxlength="7" placeholder="#FF8B00">
+      </div>
+    </div>
+    <div class="row checkbox-row">
+      <label>
+        <input type="checkbox" id="ms-diamond">
+        <span>顯示為菱形（位於 due 時間點）</span>
+      </label>
+    </div>
+    <div class="row checkbox-row">
+      <label>
+        <input type="checkbox" id="ms-show-progress">
+        <span>顯示 relates to 任務完成度（如 3/11 27%）</span>
+      </label>
+    </div>
+  </section>
+
+  <!-- ─── Epic ─── -->
+  <section class="group">
+    <h4>Epic</h4>
+    <div class="row checkbox-row">
+      <label>
+        <input type="checkbox" id="epic-stripe">
+        <span>無日期時顯示為虛線框（區分排程是否手動設定）</span>
+      </label>
+    </div>
+  </section>
+
+  <!-- ─── 時間軸介面 ─── -->
+  <section class="group">
+    <h4>時間軸介面</h4>
+    <div class="row checkbox-row">
+      <label>
+        <input type="checkbox" id="hide-current-month">
+        <span>隱藏目前時段高亮（保留今天藍線）</span>
+      </label>
+    </div>
+    <div class="row checkbox-row">
+      <label>
+        <input type="checkbox" id="show-weekends">
+        <span>標示週末（六、日）</span>
+      </label>
+    </div>
+    <div class="row checkbox-row">
+      <label>
+        <input type="checkbox" id="show-holidays">
+        <span>標示台灣國定假日</span>
+      </label>
+    </div>
+    <details class="info">
+      <summary>關於「隱藏目前時段高亮」</summary>
+      <div class="info-body">
+        Jira 預設會在當月／當週／當季欄位加上半透明色塊。
+        勾選此項會把該色塊隱藏，今天藍線仍保留。
+      </div>
+    </details>
+  </section>
+
+  <!-- ─── 專注模式 ─── -->
+  <section class="group">
+    <h4>專注模式</h4>
+    <div class="row checkbox-row">
+      <label>
+        <input type="checkbox" id="focus-mode">
+        <span>展開 Epic 時自動只顯示該 Epic 與其子任務</span>
+      </label>
+    </div>
+    <details class="info">
+      <summary>關於專注模式</summary>
+      <div class="info-body">
+        展開 Epic 時自動套用 Jira 的 Epic 篩選，只顯示該 Epic 與其子任務；
+        收合或關閉模式時自動還原。
+      </div>
+    </details>
+  </section>
+
+  <!-- ─── 操作 ─── -->
+  <div class="footer">
+    <button id="reset" class="btn-secondary">重設預設</button>
+    <span class="status" id="status"></span>
+  </div>
+
+  <p class="hint">設定即時套用至已開啟的 Jira 分頁。<br>啟用切換 / 立即重新整理請使用頁面右下角浮動 bar。</p>
+
+  <script src="popup.js"></script>
+</body>
+</html>
