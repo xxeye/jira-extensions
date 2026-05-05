@@ -243,7 +243,10 @@
 
       const strip = document.createElement('div');
       strip.className = `${STRIP_CLASS} ${cls}`;
-      strip.style.left = `${todayParentX + off * pxPerDay}px`;
+      // today-marker 落在今天那欄的正中央（實測 ~47%）→ off * pxPerDay 起點
+      // 等於每欄的「中央」。所以 strip 的左緣要再往左退 0.5 天，整段才會落在
+      // 「日期欄左緣到右緣」上，數字標籤剛好落在 strip 上方正中央。
+      strip.style.left = `${todayParentX + (off - 0.5) * pxPerDay}px`;
       strip.style.width = `${pxPerDay}px`;
       frag.appendChild(strip);
     }
