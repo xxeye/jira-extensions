@@ -95,7 +95,23 @@ Jira 用此 URL 參數實作 Epic filter。透過 `history.pushState` + `popstat
 
 ---
 
-## 易壞點 5：視圖模式偵測
+## 易壞點 5：today-marker 在「欄正中央」（影響 strip 繪製）
+
+`drawHolidayStrips` 用 `today.offsetLeft` 當作「今天」的錨點往兩邊外推。
+**Jira 把 today-marker 放在今天那欄的正中央**（實測 ~47%），不是欄左緣。
+所以 strip 的 `left` 必須 -0.5 day 才能對齊日期欄左緣（讓日期數字落在 strip 中央上方）：
+
+```js
+strip.style.left = `${todayParentX + (off - 0.5) * pxPerDay}px`;
+```
+
+如果哪天 Jira 改成把 today-marker 放在欄左緣 / 右緣，這 -0.5 偏移就要對應改掉。
+驗證方法：開週末標示 → 看週六 / 日 strip 是不是剛好覆蓋「6」「日」那兩欄、
+數字標籤是不是落在 strip 正中央上方。沒對齊就是 today-marker 位置變了。
+
+---
+
+## 易壞點 6：視圖模式偵測
 
 **位置**：`timeline_color.js` — `getTimelineMode()`
 
@@ -141,6 +157,8 @@ Jira UI 大改版後，依序測：
 
 1. [ ] 開 Timeline 看 PT bar 有沒有變色 → testid 仍對 → 沒就改 SEL_LIST_ITEM 等
 2. [ ] 切週/月/季視圖看 strip 對不對齊 → URL `?timeline=` 仍是這 3 值
-3. [ ] 勾「隱藏目前時段」沒效果 → `._1kl7ia51._1s7zia51` class 變了，重新找
-4. [ ] Milestone 菱形 hover 看不到日期 → bar 直接子結構變了
-5. [ ] 專注模式展開 Epic 沒過濾 → `?issueParent=` URL 機制變了
+3. [ ] 週末/假日 strip 沒對到日期欄（往左或右整體偏 0.5 day）→ today-marker 位置改了，調整 `(off - 0.5)` 偏移
+4. [ ] 勾「隱藏目前時段」沒效果 → `._1kl7ia51._1s7zia51` class 變了，重新找
+5. [ ] Milestone 菱形 hover 看不到日期 → bar 直接子結構變了
+6. [ ] 專注模式展開 Epic 沒過濾 → `?issueParent=` URL 機制變了
+7. [ ] PT 鎖定無效（仍可拖曳）→ Jira drag listener 改成非 mousedown 觸發（試 pointerdown）
