@@ -13,9 +13,11 @@ Jira Timeline 視覺強化插件 — 為 Planning Task / Milestone / Epic 加上
 
 ## 功能
 
-### Planning Task — 條塊上色
+### Planning Task — 條塊上色 / 鎖定
 
 所有 Planning Task 類型的 bar 染成自訂色，與一般任務區隔。顏色可自訂（色票或 HEX）。
+
+可勾選「鎖定拖曳與拉長」防止誤動 PT 日期；鎖定狀態下從左欄任務名開啟側欄。
 
 ![PT 上色](screenshots/01-pt-color.png)
 > **截圖**：Timeline 上一段 PT bar 顯示自訂色（綠）。
@@ -39,8 +41,8 @@ Jira Timeline 視覺強化插件 — 為 Planning Task / Milestone / Epic 加上
 
 ### Epic — 虛線框
 
-部分團隊採跨職種多視角看板，多職能共同參與的 Epic 不一定會手動填日期、由子任務自動推算範圍。
-開啟該功能會將無日期 Epic bar 改為虛線外框，在 Timeline 分辨該 Epic 本身有無設日期。
+依自定欄位 `customfield_10919` 標記為「啟用」的 Epic，bar 改為虛線外框，
+方便在 Timeline 上一眼分辨需要被特別關注或追蹤的 Epic。
 
 ![Epic 虛線框](screenshots/04-epic-stripe.png)
 > **截圖**：Timeline 上一個 Epic 顯示虛線外框 bar，最好同時露出底下幾筆子任務（PT/Task）作為對照。

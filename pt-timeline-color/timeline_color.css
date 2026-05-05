@@ -38,6 +38,21 @@ body.jpt-ms-lock-edges .jpt-ms-bar [data-testid*="right-draggable-handle-"],
   cursor: pointer !important;
 }
 
+/* Planning Task 鎖定拖曳/拉長（防誤動）
+ *   - 兩端 resize handles 禁用（CSS pointer-events）
+ *   - bar 整段拖曳由 JS 在 capture phase 攔 mousedown（stopPropagation），
+ *     見 timeline_color.js 的 mousedown handler；CSS 攔不到 Jira document 級的 listener
+ *   - 不影響 hover tooltip 與 click-to-open（mousedown stopPropagation 不擋 click 事件）
+ */
+body.jpt-pt-lock-drag .jpt-pt-bar [data-testid*="left-draggable-handle-"],
+body.jpt-pt-lock-drag .jpt-pt-bar [data-testid*="right-draggable-handle-"] {
+  pointer-events: none !important;
+  cursor: default !important;
+}
+body.jpt-pt-lock-drag .jpt-pt-bar {
+  cursor: default !important;
+}
+
 /* Milestone bar — 菱形模式（在 due 時間點繪一個菱形）
  * 注意：
  *   - 用 opacity:0 而非 visibility:hidden — 後者會讓子元素失去 click handler，
@@ -117,10 +132,10 @@ body.jpt-active .dependencies-overlay path[data-testid$=".line.interactive-path"
   cursor: default !important;
 }
 
-/* Epic 無起訖日期 — 透明填充 + outline 虛線框
+/* Epic 標記（依 customfield_10919 == "啟用"）— 透明填充 + outline 虛線框
  * 用 outline 而非 border：不參與 layout，渲染最便宜。
  */
-.jpt-epic-no-dates {
+.jpt-epic-highlight {
   background-color: transparent !important;
   background-image: none !important;
   outline: 1.5px dashed rgba(190, 140, 220, 0.85) !important;

@@ -19,8 +19,9 @@
 (() => {
   let DEBUG = false;
   const TYPE_CACHE_KEY = 'jpt:type-cache:v4';     // 永久（issue type 不可改），跨 F5/路由保留
-  const DATA_CACHE_KEY = 'jpt:data-cache:v4';     // 短 TTL，但持久化讓 F5/路由不重抓
-  const LEGACY_KEYS    = ['jpt:issuetype-cache:v3'];  // 清掉舊版避免佔空間
+  // dataCache schema 從 v4 改 v5：移除 hasDates、新增 epicHighlight（依 customfield_10919）
+  const DATA_CACHE_KEY = 'jpt:data-cache:v5';
+  const LEGACY_KEYS    = ['jpt:issuetype-cache:v3', 'jpt:data-cache:v4'];
 
   // 預設設定（fallback；popup 未設過時用）
   // 註：msLockEdges / arrowScroll 已固化為預設行為，不再可設定（避免使用者誤關造成 bug）
@@ -30,6 +31,7 @@
     msColor:           '#FF8B00',
     msDiamond:         false,
     msShowProgress:    false,
+    ptLockDrag:        false,    // 鎖定 PT 拖曳/拉長（防誤動）
     epicStripe:        false,
     hideCurrentMonth:  false,
     showWeekends:      false,
@@ -42,9 +44,9 @@
   const PT_CLASS         = 'jpt-pt-bar';
   const MS_CLASS         = 'jpt-ms-bar';
   const DIA_CLASS        = 'jpt-ms-diamond';
-  const EPIC_NODATES_CLASS = 'jpt-epic-no-dates';
+  const EPIC_HIGHLIGHT_CLASS = 'jpt-epic-highlight';
   const PROGRESS_CLASS   = 'jpt-ms-progress';   // 進度 badge
-  const ALL_CLASSES = [PT_CLASS, MS_CLASS, DIA_CLASS, EPIC_NODATES_CLASS];
+  const ALL_CLASSES = [PT_CLASS, MS_CLASS, DIA_CLASS, EPIC_HIGHLIGHT_CLASS];
 
   const TYPE_TO_CLASS = {
     'Planning Task': PT_CLASS,
@@ -56,8 +58,8 @@
   const EPIC_TYPE_NAMES = new Set(['Epic', '大型工作']);
 
   // Jira 自訂欄位（依專案而定）
-  const FIELD_START_DATE = 'customfield_10015';
-  const FIELD_ROLE       = 'customfield_10773';   // 職種（多選 — 對應 plan/art/data/...）
+  const FIELD_ROLE            = 'customfield_10773';   // 職種（多選 — 對應 plan/art/data/...）
+  const FIELD_EPIC_HIGHLIGHT  = 'customfield_10919';   // Epic 是否要顯示為虛線框（單選，"啟用" 才畫）
 
   // ─── 選擇器 ──────────────────────────────────────────
   const SEL_LIST_ITEM = '[data-testid^="roadmap.timeline-table.components.list-item.container-"]';
@@ -70,8 +72,8 @@
   //     - issue type 一旦建立永不變動 → 整個 session 不過期
   //     - 持久化到 sessionStorage，跨 F5 / SPA 路由保留
   //
-  //   dataCache：Map<key, { hasDates, progress, roles, relates, ts }>
-  //     - 這些資料用途單純（hasDates → Epic 虛線、progress/relates → Milestone hover、
+  //   dataCache：Map<key, { epicHighlight, progress, roles, relates, ts }>
+  //     - 這些資料用途單純（epicHighlight → Epic 虛線、progress/relates → Milestone hover、
   //       roles → PT hover），都不是即時性高的資訊
   //     - TTL 拉長到 1 小時，搭配兩個即時觸發點兜底：
   //       (1) 使用者拖 bar 改日期 → mouseup 偵測 + 主動失效該筆
@@ -131,6 +133,8 @@
     document.body?.classList.toggle('jpt-hide-current-month', !!settings.hideCurrentMonth && !!settings.enabled);
     // Milestone 鎖定前後拉長 — 固化為預設行為，但只在啟用時生效
     document.body?.classList.toggle('jpt-ms-lock-edges', !!settings.enabled);
+    // Planning Task 鎖定拖曳/拉長 — 由 popup 設定控制
+    document.body?.classList.toggle('jpt-pt-lock-drag', !!settings.ptLockDrag && !!settings.enabled);
   };
 
   // ─── 週末/假日 strip 渲染（universal：支援週/月/季 view）───
@@ -377,6 +381,7 @@
         if (changes.msDiamond)  settings.msDiamond  = !!(changes.msDiamond.newValue);
         // msLockEdges 已固化為預設行為，不再從 storage 讀取
         if (changes.msShowProgress !== undefined) settings.msShowProgress = !!(changes.msShowProgress.newValue);
+        if (changes.ptLockDrag !== undefined) settings.ptLockDrag = !!(changes.ptLockDrag.newValue);
         if (changes.epicStripe) settings.epicStripe = !!(changes.epicStripe.newValue);
         if (changes.hideCurrentMonth) settings.hideCurrentMonth = !!(changes.hideCurrentMonth.newValue);
         if (changes.showWeekends !== undefined) settings.showWeekends = !!(changes.showWeekends.newValue);
@@ -403,7 +408,7 @@
           sessionStorage.removeItem(TYPE_CACHE_KEY);
           sessionStorage.removeItem(DATA_CACHE_KEY);
         } catch {}
-        document.querySelectorAll(`.${PT_CLASS}, .${MS_CLASS}, .${DIA_CLASS}, .${EPIC_NODATES_CLASS}`).forEach(el => {
+        document.querySelectorAll(`.${PT_CLASS}, .${MS_CLASS}, .${DIA_CLASS}, .${EPIC_HIGHLIGHT_CLASS}`).forEach(el => {
           el.classList.remove(...ALL_CLASSES);
         });
         scheduleScan();
@@ -464,31 +469,34 @@
   };
 
   // ─── 套色到單一 bar ──────────────────────────────────
-  // classList.add/remove 不在 attributeFilter 內，不會觸發 MutationObserver。
+  // 冪等實作：先算出目標 class set，再跟 bar 現有 class 比對，差異才動 DOM。
+  // 之前無條件 remove(...ALL_CLASSES) + add 會在新一輪掃描期間短暫露出 Jira
+  // 預設樣式（捲動時尤其明顯），現在 class 沒變就完全不寫入。
   // badge 透過 renderProgressBadge 冪等處理（只在內容改變時才動 DOM）。
   const applyColor = (issueId, issueKey) => {
     if (!settings.enabled) return;  // 防呆：停用時絕不上色（含已排隊的 scan timer）
     if (!typeCache.has(issueKey)) return;  // 還沒抓過 type，等 fetch 完才上色
     const type = typeCache.get(issueKey);
-    const data = dataCache.get(issueKey) || { hasDates: false, progress: null };
+    const data = dataCache.get(issueKey) || { epicHighlight: false, progress: null };
     const bar = findBarById(issueId);
     if (!bar) return;
 
-    bar.classList.remove(...ALL_CLASSES);
-    if (!type) {
-      renderProgressBadge(bar, null);
-      return;
-    }
-
-    const cls = TYPE_TO_CLASS[type];
+    // 目標狀態
+    const cls = type ? TYPE_TO_CLASS[type] : null;
     const isMs = cls === MS_CLASS;
-    if (cls) {
-      bar.classList.add(cls);
-      if (isMs && settings.msDiamond) bar.classList.add(DIA_CLASS);
-    } else if (EPIC_TYPE_NAMES.has(type) && settings.epicStripe && !data.hasDates) {
-      bar.classList.add(EPIC_NODATES_CLASS);
-    }
-    // Milestone 才顯示 badge；其他類型清掉
+    const wantPT   = cls === PT_CLASS;
+    const wantMS   = isMs;
+    const wantDIA  = isMs && !!settings.msDiamond;
+    const wantEpic = !cls && type && EPIC_TYPE_NAMES.has(type)
+                       && !!settings.epicStripe && !!data.epicHighlight;
+
+    const cl = bar.classList;
+    if (cl.contains(PT_CLASS)             !== wantPT)   cl.toggle(PT_CLASS, wantPT);
+    if (cl.contains(MS_CLASS)             !== wantMS)   cl.toggle(MS_CLASS, wantMS);
+    if (cl.contains(DIA_CLASS)            !== wantDIA)  cl.toggle(DIA_CLASS, wantDIA);
+    if (cl.contains(EPIC_HIGHLIGHT_CLASS) !== wantEpic) cl.toggle(EPIC_HIGHLIGHT_CLASS, wantEpic);
+
+    // Milestone 才顯示 badge；其他類型清掉（renderProgressBadge 自身冪等）
     renderProgressBadge(bar, isMs ? data.progress : null);
   };
 
@@ -553,13 +561,22 @@
   // ─── 批次查 issue 資料 ─────────────────────────────
   // - 一律抓 issuetype / 日期（type 之後永久 cache、日期短 TTL）
   // - issuelinks 只在 msShowProgress 開啟時才抓（response size 大幅縮小）
+  // Epic 高亮欄位可能是 string / 單選 object / 多選 array — 容錯三種形式
+  const isEpicHighlightOn = (raw) => {
+    if (!raw) return false;
+    if (typeof raw === 'string') return raw === '啟用';
+    if (Array.isArray(raw)) return raw.some(o => o?.value === '啟用' || o?.name === '啟用');
+    if (typeof raw === 'object') return raw.value === '啟用' || raw.name === '啟用';
+    return false;
+  };
+
   const BATCH_SIZE = 50;
   const fetchTypes = async (keys) => {
     if (!keys.length) return;
     keys.forEach(k => pending.add(k));
     try {
-      // 一律抓 cf[10773] 職種（給 PT hover）+ issuelinks（給 progress badge / Milestone hover）
-      const fields = ['issuetype', FIELD_START_DATE, 'duedate', FIELD_ROLE, 'issuelinks'];
+      // 一律抓 cf[10773] 職種（給 PT hover）+ cf[10919] Epic 高亮旗標 + issuelinks（給 progress badge / Milestone hover）
+      const fields = ['issuetype', FIELD_ROLE, FIELD_EPIC_HIGHLIGHT, 'issuelinks'];
       const issues = await JiraApi.searchByKeys(keys, fields);
       const now = Date.now();
       const seen = new Set();
@@ -568,7 +585,7 @@
       for (const issue of issues) {
         const f = issue.fields || {};
         const type = f.issuetype?.name || null;
-        const hasDates = !!(f[FIELD_START_DATE] || f.duedate);
+        const epicHighlight = isEpicHighlightOn(f[FIELD_EPIC_HIGHLIGHT]);
         // 職種 cf[10773] 是多選 — [{value: 'data', id: '10657'}, ...]
         const roleField = f[FIELD_ROLE];
         const roles = Array.isArray(roleField)
@@ -577,14 +594,14 @@
         const progress = (type === 'Milestone') ? computeMsProgress(f.issuelinks) : null;
         const relates = (type === 'Milestone') ? computeRelatesList(f.issuelinks) : [];
         if (type !== null) typeCache.set(issue.key, type);
-        dataCache.set(issue.key, { hasDates, progress, roles, relates, ts: now, _jitter: jitter() });
+        dataCache.set(issue.key, { epicHighlight, progress, roles, relates, ts: now, _jitter: jitter() });
         seen.add(issue.key);
       }
       // 沒回傳的 key（已封存 / 權限不足）也標個空快取免得反覆重試
       for (const k of keys) {
         if (seen.has(k)) continue;
         if (!typeCache.has(k)) typeCache.set(k, null);
-        dataCache.set(k, { hasDates: false, progress: null, roles: [], relates: [], ts: now, _jitter: jitter() });
+        dataCache.set(k, { epicHighlight: false, progress: null, roles: [], relates: [], ts: now, _jitter: jitter() });
       }
       persistTypeCache();
       persistDataCache();
@@ -770,6 +787,15 @@
   document.addEventListener('mousedown', (e) => {
     const bar = e.target.closest?.('[data-testid*="draggable-bar-"][data-testid$="-container"]');
     if (!bar) { dragStart = null; return; }
+    // 鎖定 PT 拖曳：在 capture phase 攔下 mousedown，Jira 的 drag listener 收不到。
+    // 副作用：click-to-open 側欄也會失效（Jira 內部用 mousedown 啟動 click 流程）。
+    // 鎖定狀態下用左欄任務名開啟側欄替代。
+    if (settings.enabled && settings.ptLockDrag && bar.classList.contains(PT_CLASS)) {
+      e.stopPropagation();
+      e.preventDefault();
+      dragStart = null;
+      return;
+    }
     const m = (bar.getAttribute('data-testid') || '').match(/draggable-bar-(\d+)-container/);
     if (!m) return;
     dragStart = { x: e.clientX, y: e.clientY, id: m[1], key: idToKey.get(m[1]) };
@@ -797,7 +823,42 @@
   }, true);
 
   let domObserver = null;
-  const onMutation = () => {
+  // 對「新加入」的 list-item 立即從 cache 套色（不等 300ms scheduleScan debounce）。
+  // 捲動時 Jira virtualizer 不停加/刪 list-item，新進場的 bar 若等 debounce 才上色，
+  // 中間會短暫露出 Jira 預設樣式 → A 類閃爍主因之一。
+  // Jira virtualizer 對 list-item（左欄）跟 bar（右欄 chart-item）的 DOM 進出
+  // 不一定同 batch — Epic 預設色比較顯眼，bar 進場若沒立刻套色就會閃實心。
+  // 兩條路徑都攔：list-item 進場 → 從 list-item 解 id/key；bar 進場 → 經 idToKey 反查。
+  const SEL_BAR_CONTAINER = '[data-testid*="draggable-bar-"][data-testid$="-container"]';
+  const applyCachedColorToAddedItems = (mutations) => {
+    if (!settings.enabled) return;
+    if (!mutations) return;  // startActive 首次手動呼叫沒帶參數 → 走全頁 scan 即可
+    const addedItems = new Set();
+    const addedBars  = new Set();
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== 1) continue;
+        if (node.matches?.(SEL_LIST_ITEM)) addedItems.add(node);
+        node.querySelectorAll?.(SEL_LIST_ITEM).forEach(n => addedItems.add(n));
+        if (node.matches?.(SEL_BAR_CONTAINER)) addedBars.add(node);
+        node.querySelectorAll?.(SEL_BAR_CONTAINER).forEach(b => addedBars.add(b));
+      }
+    }
+    for (const item of addedItems) {
+      const id = extractIssueId(item);
+      const key = extractIssueKey(item);
+      if (id && key && typeCache.has(key)) applyColor(id, key);
+    }
+    for (const bar of addedBars) {
+      const mm = (bar.getAttribute('data-testid') || '').match(/draggable-bar-(\d+)-container/);
+      if (!mm) continue;
+      const id = mm[1];
+      const key = idToKey.get(id);  // 之前 scan 過就有；首次見的 issue 等 fetch 完才上色
+      if (key && typeCache.has(key)) applyColor(id, key);
+    }
+  };
+  const onMutation = (mutations) => {
+    applyCachedColorToAddedItems(mutations);
     scheduleScan();
     drawHolidayStrips();
     scheduleUpdateFocus();
@@ -822,7 +883,7 @@
     if (scanRetryTimer) { clearTimeout(scanRetryTimer); scanRetryTimer = null; }
     if (updateFocusTimer) { clearTimeout(updateFocusTimer); updateFocusTimer = null; }
     // 即使 observer 沒在跑，也要把殘留的 class / badge 清乾淨（停用時務必收尾）
-    document.querySelectorAll(`.${PT_CLASS}, .${MS_CLASS}, .${DIA_CLASS}, .${EPIC_NODATES_CLASS}`).forEach(el => {
+    document.querySelectorAll(`.${PT_CLASS}, .${MS_CLASS}, .${DIA_CLASS}, .${EPIC_HIGHLIGHT_CLASS}`).forEach(el => {
       el.classList.remove(...ALL_CLASSES);
     });
     document.querySelectorAll(`.${PROGRESS_CLASS}`).forEach(el => el.remove());
@@ -869,7 +930,7 @@
       dataCache.clear();
       sessionStorage.removeItem(TYPE_CACHE_KEY);
       sessionStorage.removeItem(DATA_CACHE_KEY);
-      document.querySelectorAll(`.${PT_CLASS}, .${MS_CLASS}, .${DIA_CLASS}, .${EPIC_NODATES_CLASS}`).forEach(el => {
+      document.querySelectorAll(`.${PT_CLASS}, .${MS_CLASS}, .${DIA_CLASS}, .${EPIC_HIGHLIGHT_CLASS}`).forEach(el => {
         el.classList.remove(...ALL_CLASSES);
       });
       console.log('[jpt] both caches cleared');

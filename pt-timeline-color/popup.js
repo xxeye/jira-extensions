@@ -7,6 +7,7 @@ const DEFAULTS = {
   msColor:           '#FF8B00',
   msDiamond:         false,
   msShowProgress:    false,
+  ptLockDrag:        false,
   epicStripe:        false,
   hideCurrentMonth:  false,
   showWeekends:      false,
@@ -22,6 +23,7 @@ const els = {
   msText:           $('ms-color-text'),
   diamond:          $('ms-diamond'),
   msShowProgress:   $('ms-show-progress'),
+  ptLockDrag:       $('pt-lock-drag'),
   epicStripe:       $('epic-stripe'),
   hideCurrentMonth: $('hide-current-month'),
   showWeekends:     $('show-weekends'),
@@ -49,6 +51,7 @@ const load = async () => {
   els.msText.value  = cfg.msColor;
   els.diamond.checked          = !!cfg.msDiamond;
   els.msShowProgress.checked   = !!cfg.msShowProgress;
+  els.ptLockDrag.checked       = !!cfg.ptLockDrag;
   els.epicStripe.checked       = !!cfg.epicStripe;
   els.hideCurrentMonth.checked = !!cfg.hideCurrentMonth;
   els.showWeekends.checked     = !!cfg.showWeekends;
@@ -63,6 +66,7 @@ const save = async () => {
     msColor:          els.ms.value,
     msDiamond:        els.diamond.checked,
     msShowProgress:   els.msShowProgress.checked,
+    ptLockDrag:       els.ptLockDrag.checked,
     epicStripe:       els.epicStripe.checked,
     hideCurrentMonth: els.hideCurrentMonth.checked,
     showWeekends:     els.showWeekends.checked,
@@ -88,6 +92,7 @@ els.msText.addEventListener('input', () => {
 
 els.diamond.addEventListener('change', save);
 els.msShowProgress.addEventListener('change', save);
+els.ptLockDrag.addEventListener('change', save);
 els.epicStripe.addEventListener('change', save);
 els.hideCurrentMonth.addEventListener('change', save);
 els.showWeekends.addEventListener('change', save);
