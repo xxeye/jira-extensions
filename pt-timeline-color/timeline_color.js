@@ -36,7 +36,7 @@
     hideCurrentMonth:  false,
     showWeekends:      false,
     showHolidays:      false,
-    showWorkingDays:   true,    // hover/拖拉時 bar 結束日標籤加「(工作天 X 天)」
+    showWorkingDays:   false,   // hover/拖拉時 bar 結束日標籤加「(工作天 X 天)」
     focusMode:         false,
   };
   let settings = { ...DEFAULTS };
@@ -995,6 +995,12 @@
     // 鎖住 wd overlay：這段期間 cursor 可能滑出 bar（resize / 整段拖），都要保留 overlay
     wdDragLocked = true;
   }, true);
+  // 防 mouseup 落在視窗外造成 wdDragLocked 永遠卡 true（之後 hover 全失效）
+  // window.blur / pagehide 都重置；正常拖拉內 mouseup 也會清乾淨
+  window.addEventListener('blur', () => {
+    if (wdDragLocked) { wdDragLocked = false; stopWdLoop(); }
+  });
+
   document.addEventListener('mouseup', (e) => {
     const wasDragging = wdDragLocked;
     wdDragLocked = false;

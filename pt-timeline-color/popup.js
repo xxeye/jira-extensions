@@ -12,7 +12,7 @@ const DEFAULTS = {
   hideCurrentMonth:  false,
   showWeekends:      false,
   showHolidays:      false,
-  showWorkingDays:   true,
+  showWorkingDays:   false,
   focusMode:         false,
 };
 
