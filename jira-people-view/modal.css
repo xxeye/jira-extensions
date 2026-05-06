@@ -12,6 +12,8 @@
      bar-h              24px / radius 3px
 */
 
+/* 浮動按鈕：用 Atlassian Design System tokens（var(--ds-xxx, fallback)），
+ * Jira 切 Light/Dark 主題時自動跟換。Modal（下面）刻意不換 — 維持深色報表 */
 #jpv-launch {
   position: fixed;
   bottom: 24px;
@@ -19,25 +21,25 @@
   z-index: 9998;
   display: inline-flex;
   align-items: center;
-  background: #2C333A;
-  border: 1px solid rgba(166, 174, 184, 0.10);
+  background: var(--ds-surface-raised, #2C333A);
+  border: 1px solid var(--ds-border, rgba(166, 174, 184, 0.10));
   border-radius: 3px;
   padding: 6px 12px 6px 4px;
   font-family: 'Atlassian Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 14px;
   font-weight: 500;
-  color: #B6C2CF;
+  color: var(--ds-text, #B6C2CF);
   cursor: pointer;
   user-select: none;
   transition: background 0.15s, box-shadow 0.15s, color 0.15s;
 }
 #jpv-launch:hover {
-  background: #38414A;
-  color: #CECFD2;
+  background: var(--ds-background-neutral-hovered, #38414A);
+  color: var(--ds-text, #CECFD2);
 }
 #jpv-launch.dragging {
   box-shadow: 0 6px 28px rgba(102, 157, 241, 0.4);
-  background: #38414A;
+  background: var(--ds-background-neutral-hovered, #38414A);
   opacity: 0.9;
 }
 
@@ -49,20 +51,20 @@
   padding: 0 8px;
   margin-right: 4px;
   font-size: 14px;
-  color: #5C6168;
+  color: var(--ds-text-subtlest, #5C6168);
   cursor: grab;
-  border-right: 1px solid rgba(166, 174, 184, 0.15);
+  border-right: 1px solid var(--ds-border, rgba(166, 174, 184, 0.15));
   align-self: stretch;
   transition: color 0.15s, background 0.15s;
 }
 #jpv-launch .jpv-launch-handle:hover {
-  color: #B6C2CF;
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--ds-text, #B6C2CF);
+  background: var(--ds-background-neutral-subtle-hovered, rgba(255, 255, 255, 0.04));
 }
-#jpv-launch.dragging .jpv-launch-handle { cursor: grabbing; color: #B6C2CF; }
+#jpv-launch.dragging .jpv-launch-handle { cursor: grabbing; color: var(--ds-text, #B6C2CF); }
 
 #jpv-launch .jpv-launch-icon {
-  color: #EB5050;
+  color: var(--ds-text-danger, #EB5050);
   margin-right: 8px;
   font-size: 14px;
   line-height: 1;

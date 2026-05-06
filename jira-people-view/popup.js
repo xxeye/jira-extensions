@@ -21,8 +21,9 @@ const STORAGE_KEY          = 'jpv-types';            // 已勾的類型陣列（
 const STORAGE_CAP          = 'jpv-cap';
 const STORAGE_SHOW_PT_LOAD = 'jpv-show-pt-load';     // 主視圖模式下，是否顯示 PT 負載對比 bar
 
-const DEFAULT_TYPES        = MAIN_TYPES.map(t => t.key);  // 預設主視圖全選、PT 不選
+const DEFAULT_TYPES        = [];   // 預設 A 視角職種全不選，使用者按需勾
 const DEFAULT_CAP          = 5;
+const DEFAULT_SHOW_PT_LOAD = true; // 預設只開「PT 並行對比 bar」
 
 const $ = (id) => document.getElementById(id);
 const flashStatus = () => { const s = $('status'); s.classList.add('show'); setTimeout(() => s.classList.remove('show'), 1200); };
@@ -34,7 +35,7 @@ const load = () => new Promise(resolve => {
     resolve({
       types: Array.isArray(data[STORAGE_KEY]) ? data[STORAGE_KEY] : DEFAULT_TYPES,
       cap: Number.isFinite(data[STORAGE_CAP]) ? data[STORAGE_CAP] : DEFAULT_CAP,
-      showPtLoad: data[STORAGE_SHOW_PT_LOAD] === true,
+      showPtLoad: typeof data[STORAGE_SHOW_PT_LOAD] === 'boolean' ? data[STORAGE_SHOW_PT_LOAD] : DEFAULT_SHOW_PT_LOAD,
     });
   });
 });

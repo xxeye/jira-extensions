@@ -5,12 +5,9 @@
   const STORAGE_CAP = 'jpv-cap';
   const STORAGE_BTN_POS = 'jpv-button-pos';
   const STORAGE_SHOW_PT_LOAD = 'jpv-show-pt-load';
-  const DEFAULT_TYPES = [
-    'Planning Task', 'Plan Story', 'Art Story', 'Anim Task',
-    'Engine Task', 'Backend Task', 'Math Task', 'Data Task',
-    'QA Task', 'Dev Task',
-  ];
+  const DEFAULT_TYPES = [];           // 預設 A 視角全不勾，使用者按需開啟
   const DEFAULT_CAP = 5;
+  const DEFAULT_SHOW_PT_LOAD = true;  // 預設只開「PT 並行對比 bar」
 
   const isTimelinePage = () =>
     location.pathname.includes('/boards') &&
@@ -26,7 +23,7 @@
         types: Array.isArray(data[STORAGE_KEY]) ? data[STORAGE_KEY] : DEFAULT_TYPES,
         cap: Number.isFinite(data[STORAGE_CAP]) ? data[STORAGE_CAP] : DEFAULT_CAP,
         btnPos: data[STORAGE_BTN_POS] || null,
-        showPtLoad: data[STORAGE_SHOW_PT_LOAD] === true,
+        showPtLoad: typeof data[STORAGE_SHOW_PT_LOAD] === 'boolean' ? data[STORAGE_SHOW_PT_LOAD] : DEFAULT_SHOW_PT_LOAD,
       });
     });
   });
