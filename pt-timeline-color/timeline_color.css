@@ -322,7 +322,7 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
   border-bottom: 1px solid var(--ds-border, rgba(255, 255, 255, 0.08));
   font-size: 13px;
   font-weight: 600;
-  color: var(--ds-text, #FFFFFF);
+  color: var(--ds-text, #CECFD2);
 }
 .jpt-tip-body { padding: 6px 12px 8px; }
 .jpt-tip-item {
