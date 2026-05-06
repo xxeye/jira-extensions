@@ -125,6 +125,30 @@ location.search.timeline ∈ { 'WEEKS', 'MONTHS', 'QUARTERS' }
 
 ---
 
+## 易壞點 7：直接改 Jira React 控制的 DOM 文字
+
+**症狀**：Timeline 開頁面就跳「我們這一端發生錯誤 Hash ZDVWD1」（或類似 hash）
+
+**原因**：寫了 `el.textContent = ...` 在 Jira 用 React 渲染的 `<small>` / 標籤上 →
+React 拿著 internal Text node 參考要 reconcile 時找不到原本的 child → 拋
+「Failed to remove child」之類例外，整個 timeline 區塊掛掉。
+
+**已知雷區**：
+- bar 內結束日標籤 `<small>`（例：「May 21, 2026 (8 天)」）
+- 任何 Jira 條塊 / list-item 內可見的 React 元素
+
+**例外情況** — `stripDurationSuffix(bar)` 也是改 `<small>.textContent`，沒事？
+因為它只在「菱形模式」hover 時跑，菱形那 `<small>` CSS `opacity: 0`，
+React 沒收到 visible 變動 → 沒重渲染 → DOM 不會被反向 reconcile。
+這是運氣好不是設計，新功能不要照搬這個模式。
+
+**正確做法**：
+- 想顯示額外資訊 → body-level 浮動元素（像 `#jpt-hover-tip` / `#jpt-wd-overlay`）
+- 用 BCR 貼齊原元素位置即可，完全不碰 Jira DOM
+- 視覺要當下跟拖拉更新 → rAF loop 每 frame 重算
+
+---
+
 ## Console Debug Helpers
 
 ```js

@@ -36,6 +36,7 @@
     hideCurrentMonth:  false,
     showWeekends:      false,
     showHolidays:      false,
+    showWorkingDays:   true,    // hover/拖拉時 bar 結束日標籤加「(工作天 X 天)」
     focusMode:         false,
   };
   let settings = { ...DEFAULTS };
@@ -389,6 +390,7 @@
         if (changes.hideCurrentMonth) settings.hideCurrentMonth = !!(changes.hideCurrentMonth.newValue);
         if (changes.showWeekends !== undefined) settings.showWeekends = !!(changes.showWeekends.newValue);
         if (changes.showHolidays !== undefined) settings.showHolidays = !!(changes.showHolidays.newValue);
+        if (changes.showWorkingDays !== undefined) settings.showWorkingDays = !!(changes.showWorkingDays.newValue);
         // arrowScroll 已固化為預設行為，不再從 storage 讀取
         if (changes.focusMode !== undefined) settings.focusMode = !!(changes.focusMode.newValue);
         applyCssVars();
@@ -768,6 +770,188 @@
     });
   };
 
+  // ─── 工作天數標籤（hover / 拖拉時 append 到結束日 label）─────────
+  // Jira 的 hover/drag label 文字模板：
+  //   靜態：「May 21, 2026 (8 天)」  → 8 天為總天數（含頭含尾）
+  //   拖拉：「Jun 22, 2026 (+17 天)」→ 17 天為相對 delta
+  //
+  // 我們不解析 label 文字日期（語系變動會壞），改用 bar 幾何對應 today-marker 算 day offset：
+  //   today-marker.offsetLeft（以及 BCR.left + 半寬）≈ 今天那欄的中央
+  //   bar.BCR.left  = 起始日欄中央（Jira 條塊 center-to-center 慣例）
+  //   bar.BCR.right = 結束日欄中央
+  //   day_offset = round((x - todayCenterX) / pxPerDay)
+  // 工作天 = start ~ end 區間內排除週六/日 + TwHolidays 的天數。
+  const ymdStr = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+  const countWorkingDays = (start, end) => {
+    let count = 0;
+    const d = new Date(start); d.setHours(0,0,0,0);
+    const stop = new Date(end); stop.setHours(0,0,0,0);
+    while (d <= stop) {
+      const dow = d.getDay();
+      if (dow !== 0 && dow !== 6 && !TwHolidays.has(ymdStr(d))) count++;
+      d.setDate(d.getDate() + 1);
+    }
+    return count;
+  };
+
+  // Jira 在 bar 內顯示的日期 label（hover/drag 時可見）— locale-aware 解析
+  // 試過英文 (May 23, 2026) / 中文 (2026年5月23日) / ISO (2026-05-23)，都不中就回 null
+  const FULL_MONTH_NAMES = {
+    Jan:1, January:1, Feb:2, February:2, Mar:3, March:3, Apr:4, April:4, May:5,
+    Jun:6, June:6, Jul:7, July:7, Aug:8, August:8, Sep:9, September:9, Sept:9,
+    Oct:10, October:10, Nov:11, November:11, Dec:12, December:12,
+  };
+  const parseLabelDate = (text) => {
+    if (!text) return null;
+    // 英文：May 23, 2026 / Sep. 5, 2026
+    let m = text.match(/([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s*(\d{4})/);
+    if (m) {
+      const month = FULL_MONTH_NAMES[m[1]];
+      if (month) return new Date(parseInt(m[3], 10), month - 1, parseInt(m[2], 10));
+    }
+    // 中文：2026年5月23日 / 2026/5/23
+    m = text.match(/(\d{4})[年/](\d{1,2})[月/](\d{1,2})日?/);
+    if (m) return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+    // ISO：2026-05-23
+    m = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+    return null;
+  };
+
+  // 用 label 文字當權威來源 — geometry 在長距離下會 subpixel round 漂半天，
+  // 結果每隔幾天就 ±1 工作天的 bug。label 是 Jira 自己印出的「N 天」與起訖日，可信。
+  const computeBarDayRange = (bar) => {
+    const smalls = [...bar.querySelectorAll('small')]
+      .map(s => ({ s, r: s.getBoundingClientRect(), text: (s.textContent || '').trim() }))
+      .filter(x => x.r.width > 0)
+      .sort((a, b) => a.r.left - b.r.left);
+    if (!smalls.length) return null;
+
+    let startDate = null;
+    let endDate = null;
+    let absoluteCount = null;
+    for (const x of smalls) {
+      const d = parseLabelDate(x.text);
+      if (!d) continue;
+      // 含「(N 天)」沒帶正負號 → 結束日 + 絕對天數
+      const mAbs = x.text.match(/\(\s*(\d+)\s*(?:天|days?)\s*\)/i);
+      if (mAbs && !x.text.match(/\(\s*[+\-]\d+/)) {
+        endDate = d;
+        absoluteCount = parseInt(mAbs[1], 10);
+        continue;
+      }
+      // 純日期（無天數括號）→ 起始日（左側 small 通常是這個）
+      if (!startDate) startDate = d;
+      else endDate = d;
+    }
+
+    if (startDate && absoluteCount) {
+      const end = endDate || (() => { const e = new Date(startDate); e.setDate(e.getDate() + absoluteCount - 1); return e; })();
+      return { start: startDate, end };
+    }
+    if (startDate && endDate) return { start: startDate, end: endDate };
+    if (endDate && absoluteCount) {
+      const start = new Date(endDate); start.setDate(start.getDate() - absoluteCount + 1);
+      return { start, end: endDate };
+    }
+
+    // ── 後備：label 解析失敗（語系沒命中 / 拖拉中只剩「+N 天」delta）
+    //    回頭用 bar 幾何推 — 已知會 ±1 漂，但總比沒有強
+    const today = document.querySelector(SEL_TODAY_MARKER);
+    if (!today) return null;
+    const computed = computePxPerDay(getTimelineMode());
+    if (!computed) return null;
+    const { pxPerDay } = computed;
+    const tr = today.getBoundingClientRect();
+    const br = bar.getBoundingClientRect();
+    if (!br.width) return null;
+    const todayCenterX = tr.left + tr.width / 2;
+    const startOff = Math.round((br.left - todayCenterX) / pxPerDay);
+    const count = Math.max(1, Math.round(br.width / pxPerDay) + 1);
+    const endOff = startOff + count - 1;
+    const t0 = new Date(); t0.setHours(0,0,0,0);
+    const start = new Date(t0); start.setDate(start.getDate() + startOff);
+    const end   = new Date(t0); end.setDate(end.getDate() + endOff);
+    return { start, end };
+  };
+
+  // 浮動 overlay：不碰 Jira `<small>` 的 textContent（會撞 React reconciler 拋
+  // 「DOM 與 vDOM 不一致」例外讓整個 timeline 掛掉）。改用 body-level <span>
+  // 靠 BCR 貼在 bar 結束日標籤右邊 — 純視覺，不污染 Jira DOM。
+  const WD_DURATION_RE = /\(\s*[+\-]?\d+\s*(?:天|days?)\s*\)/i;
+  let wdOverlayEl = null;
+  let wdRafId = null;
+  let wdActiveBar = null;
+
+  const ensureWdOverlay = () => {
+    if (wdOverlayEl && document.body.contains(wdOverlayEl)) return wdOverlayEl;
+    wdOverlayEl = document.createElement('span');
+    wdOverlayEl.id = 'jpt-wd-overlay';
+    wdOverlayEl.style.display = 'none';
+    document.body.appendChild(wdOverlayEl);
+    return wdOverlayEl;
+  };
+
+  // 找 bar 內最右邊那個有「(N 天) / (+N 天)」字樣的 <small>（結束日標籤）
+  const findEndDateLabel = (bar) => {
+    const smalls = bar.querySelectorAll('small');
+    let best = null, bestRight = -Infinity;
+    for (const s of smalls) {
+      if (!WD_DURATION_RE.test(s.textContent || '')) continue;
+      const r = s.getBoundingClientRect();
+      if (!r.width) continue;
+      if (r.right > bestRight) { bestRight = r.right; best = s; }
+    }
+    return best;
+  };
+
+  const updateWdOverlay = () => {
+    wdRafId = null;
+    const bar = wdActiveBar;
+    if (!bar || !document.body.contains(bar)) { hideWdOverlay(); return; }
+    if (!settings.enabled || !settings.showWorkingDays) { hideWdOverlay(); return; }
+    const small = findEndDateLabel(bar);
+    if (!small) { hideWdOverlay(); return; }
+    const range = computeBarDayRange(bar);
+    if (!range) { hideWdOverlay(); return; }
+    const wd = countWorkingDays(range.start, range.end);
+    const overlay = ensureWdOverlay();
+    const text = `(工作天 ${wd} 天)`;
+    if (overlay.textContent !== text) overlay.textContent = text;
+    const sr = small.getBoundingClientRect();
+    overlay.style.display = '';
+    // 對齊原 label 垂直中心（CSS 配 transform: translateY(-50%) 用）
+    overlay.style.top = `${sr.top + sr.height / 2}px`;
+    // 貼在原 label 右邊；用 BCR 即時貼齊（拖拉時也能跟）
+    overlay.style.left = `${sr.right + 4}px`;
+  };
+
+  const hideWdOverlay = () => {
+    if (wdOverlayEl) wdOverlayEl.style.display = 'none';
+  };
+
+  // 拖拉時 Jira 持續 re-render label，用 rAF loop 持續更新 overlay 位置與工作天數
+  const startWdLoop = (bar) => {
+    if (!settings.showWorkingDays) return;
+    if (bar.classList.contains(DIA_CLASS)) return;  // 菱形是時間點，沒區間意義
+    wdActiveBar = bar;
+    if (wdRafId) cancelAnimationFrame(wdRafId);
+    const tick = () => {
+      if (wdActiveBar !== bar) return;  // 換 bar 或停了
+      updateWdOverlay();
+      wdRafId = requestAnimationFrame(tick);
+    };
+    wdRafId = requestAnimationFrame(tick);
+  };
+
+  const stopWdLoop = () => {
+    wdActiveBar = null;
+    if (wdRafId) { cancelAnimationFrame(wdRafId); wdRafId = null; }
+    hideWdOverlay();
+  };
+
   document.addEventListener('mouseover', (e) => {
     if (!settings.enabled) return;
     const bar = e.target.closest?.('[data-testid*="draggable-bar-"][data-testid$="-container"]');
@@ -781,12 +965,18 @@
     if (bar.classList.contains('jpt-ms-diamond')) {
       requestAnimationFrame(() => requestAnimationFrame(() => stripDurationSuffix(bar)));
     }
+    // 工作天數 — 啟動 overlay rAF loop（持續貼在結束日 label 右邊，跟拖拉更新）
+    // 拖拉中滑過別的 bar 時不切換 wdActiveBar，避免 overlay 跑去別條
+    if (settings.showWorkingDays && !bar.classList.contains('jpt-ms-diamond') && !wdDragLocked) {
+      startWdLoop(bar);
+    }
   }, true);
 
   // ─── 偵測「使用者拖完 bar 改日期」→ 主動失效該 issue 的 cache，下次 scan 重抓 ─
   // bar 拖拉時：mousedown on bar → mousemove → mouseup（座標可能變了）
   // 這邊不嚴謹判斷成功與否，只要 mouseup 跟 mousedown 距離 > 4px 就視為可能改了日期
   let dragStart = null;
+  let wdDragLocked = false;  // 拖拉中：mouseout 不收 overlay（cursor 常離開 bar 範圍）
   document.addEventListener('mousedown', (e) => {
     const bar = e.target.closest?.('[data-testid*="draggable-bar-"][data-testid$="-container"]');
     if (!bar) { dragStart = null; return; }
@@ -802,8 +992,17 @@
     const m = (bar.getAttribute('data-testid') || '').match(/draggable-bar-(\d+)-container/);
     if (!m) return;
     dragStart = { x: e.clientX, y: e.clientY, id: m[1], key: idToKey.get(m[1]) };
+    // 鎖住 wd overlay：這段期間 cursor 可能滑出 bar（resize / 整段拖），都要保留 overlay
+    wdDragLocked = true;
   }, true);
   document.addEventListener('mouseup', (e) => {
+    const wasDragging = wdDragLocked;
+    wdDragLocked = false;
+    // 拖完若 cursor 已不在原 bar 上 → 收 overlay；還在的話留著等下次 mouseout
+    if (wasDragging && wdActiveBar) {
+      const onBar = e.target?.closest?.('[data-testid*="draggable-bar-"][data-testid$="-container"]') === wdActiveBar;
+      if (!onBar) stopWdLoop();
+    }
     if (!dragStart) return;
     const moved = Math.hypot(e.clientX - dragStart.x, e.clientY - dragStart.y);
     const { key } = dragStart;
@@ -820,6 +1019,9 @@
   document.addEventListener('mouseout', (e) => {
     const bar = e.target.closest?.('[data-testid*="draggable-bar-"][data-testid$="-container"]');
     if (!bar) return;
+    // 拖拉中不收 working-day overlay（cursor 常滑出 bar；mouseup 才決定收/留）
+    // 滑出 bar（且沒進到我們自己的 hover tooltip）→ 停 working-day overlay
+    if (!wdDragLocked && (!e.relatedTarget || !bar.contains(e.relatedTarget))) stopWdLoop();
     // 從 bar 滑進 tooltip 時不收：tooltip 自己 enter handler 會接手
     if (hoverTipEl && e.relatedTarget && hoverTipEl.contains(e.relatedTarget)) return;
     hideHoverTip();
@@ -891,6 +1093,7 @@
     });
     document.querySelectorAll(`.${PROGRESS_CLASS}`).forEach(el => el.remove());
     if (hoverTipEl) hoverTipEl.style.display = 'none';
+    stopWdLoop();
     clearHolidayStrips();
     clearFocus();
   };

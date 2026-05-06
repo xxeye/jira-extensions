@@ -12,6 +12,7 @@ const DEFAULTS = {
   hideCurrentMonth:  false,
   showWeekends:      false,
   showHolidays:      false,
+  showWorkingDays:   true,
   focusMode:         false,
 };
 
@@ -28,6 +29,7 @@ const els = {
   hideCurrentMonth: $('hide-current-month'),
   showWeekends:     $('show-weekends'),
   showHolidays:     $('show-holidays'),
+  showWorkingDays:  $('show-working-days'),
   focusMode:        $('focus-mode'),
   reset:            $('reset'),
   status:           $('status'),
@@ -56,6 +58,7 @@ const load = async () => {
   els.hideCurrentMonth.checked = !!cfg.hideCurrentMonth;
   els.showWeekends.checked     = !!cfg.showWeekends;
   els.showHolidays.checked     = !!cfg.showHolidays;
+  els.showWorkingDays.checked  = !!cfg.showWorkingDays;
   els.focusMode.checked        = !!cfg.focusMode;
 };
 
@@ -71,6 +74,7 @@ const save = async () => {
     hideCurrentMonth: els.hideCurrentMonth.checked,
     showWeekends:     els.showWeekends.checked,
     showHolidays:     els.showHolidays.checked,
+    showWorkingDays:  els.showWorkingDays.checked,
     focusMode:        els.focusMode.checked,
   });
   showStatus('已儲存');
@@ -97,6 +101,7 @@ els.epicStripe.addEventListener('change', save);
 els.hideCurrentMonth.addEventListener('change', save);
 els.showWeekends.addEventListener('change', save);
 els.showHolidays.addEventListener('change', save);
+els.showWorkingDays.addEventListener('change', save);
 els.focusMode.addEventListener('change', save);
 
 els.reset.addEventListener('click', async () => {
