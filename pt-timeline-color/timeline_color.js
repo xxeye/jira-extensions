@@ -1108,9 +1108,29 @@
     else stopActive();
   };
 
+  // ─── Light / Dark 主題偵測 ─────────────────────────
+  // Jira 把使用者選的主題寫到 <html data-color-mode="light|dark|auto">
+  // （Atlassian Design System 機制，see developer.atlassian.com/.../design-tokens-and-theming/）
+  // 我們把結果 mirror 到 body.jpt-theme-light / .jpt-theme-dark，讓 CSS override 用
+  // 大多數 surface 已經改用 --ds-* tokens 自動切，這個 class 主要給半透明強調色 override 用
+  const applyThemeClass = () => {
+    const mode = document.documentElement.getAttribute('data-color-mode') || 'auto';
+    const resolved = mode === 'auto'
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : mode;
+    document.body.classList.toggle('jpt-theme-light', resolved === 'light');
+    document.body.classList.toggle('jpt-theme-dark',  resolved !== 'light');
+  };
+
   // ─── 初始化 ────────────────────────────────────────
   const init = async () => {
     await loadSettings();
+
+    applyThemeClass();
+    new MutationObserver(applyThemeClass).observe(document.documentElement, {
+      attributes: true, attributeFilter: ['data-color-mode'],
+    });
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyThemeClass);
 
     // 初始啟用判斷（延 1.5s 等 Jira SPA 渲染完）
     setTimeout(updateActivation, 1500);

@@ -99,10 +99,22 @@ body.jpt-pt-lock-drag .jpt-pt-bar {
   pointer-events: none;
   z-index: 1;
 }
-.jpt-ms-progress-done { background: rgba(75, 206, 151, 0.18); color: #4BCE97; }
-.jpt-ms-progress-mid  { background: rgba(87, 157, 255, 0.18); color: #87B5FF; }
-.jpt-ms-progress-low  { background: rgba(247, 201, 72, 0.18); color: #F5CD47; }
-.jpt-ms-progress-zero { background: rgba(140, 155, 171, 0.18); color: #8C9BAB; }
+.jpt-ms-progress-done {
+  background: var(--ds-background-success, rgba(75, 206, 151, 0.18));
+  color: var(--ds-text-success, #4BCE97);
+}
+.jpt-ms-progress-mid {
+  background: var(--ds-background-information, rgba(87, 157, 255, 0.18));
+  color: var(--ds-text-information, #87B5FF);
+}
+.jpt-ms-progress-low {
+  background: var(--ds-background-warning, rgba(247, 201, 72, 0.18));
+  color: var(--ds-text-warning, #F5CD47);
+}
+.jpt-ms-progress-zero {
+  background: var(--ds-background-neutral, rgba(140, 155, 171, 0.18));
+  color: var(--ds-text-subtle, #8C9BAB);
+}
 
 /* 菱形模式時 badge 要再往右偏一點（避開菱形）*/
 .jpt-ms-bar.jpt-ms-diamond .jpt-ms-progress {
@@ -171,6 +183,9 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
 
 /* ─── 浮動 Toolbar（啟用 toggle + 重新整理）─────────────────
    樣式對齊 jira-people-view 浮動鈕 + Jira ADS 設計 token */
+/* Atlassian Design System tokens：var(--ds-xxx, fallback) — 沒拿到 token 就吃 fallback（dark）
+ * Jira Cloud 切主題時 token 值自動換，不用我們做事；body.jpt-theme-light 由 JS 同步
+ */
 #jpt-toolbar {
   position: fixed;
   bottom: 24px;
@@ -178,13 +193,13 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
   z-index: 9998;
   display: inline-flex;
   align-items: stretch;
-  background: #2C333A;
-  border: 1px solid rgba(166, 174, 184, 0.10);
+  background: var(--ds-surface-raised, #2C333A);
+  border: 1px solid var(--ds-border, rgba(166, 174, 184, 0.10));
   border-radius: 3px;
   font-family: 'Atlassian Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 14px;
   font-weight: 500;
-  color: #B6C2CF;
+  color: var(--ds-text, #B6C2CF);
   user-select: none;
   transition: box-shadow 0.15s;
   overflow: hidden;
@@ -201,15 +216,15 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
   justify-content: center;
   padding: 0 8px;
   font-size: 14px;
-  color: #5C6168;
+  color: var(--ds-text-subtlest, #5C6168);
   cursor: grab;
   transition: color 0.15s, background 0.15s;
 }
 .jpt-tb-handle:hover {
-  color: #B6C2CF;
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--ds-text, #B6C2CF);
+  background: var(--ds-background-neutral-subtle-hovered, rgba(255, 255, 255, 0.04));
 }
-#jpt-toolbar.dragging .jpt-tb-handle { cursor: grabbing; color: #B6C2CF; }
+#jpt-toolbar.dragging .jpt-tb-handle { cursor: grabbing; color: var(--ds-text, #B6C2CF); }
 .jpt-tb-seg {
   display: inline-flex;
   align-items: center;
@@ -217,10 +232,13 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.jpt-tb-seg:hover { background: #38414A; color: #CECFD2; }
+.jpt-tb-seg:hover {
+  background: var(--ds-background-neutral-hovered, #38414A);
+  color: var(--ds-text, #CECFD2);
+}
 .jpt-tb-divider {
   width: 1px;
-  background: rgba(166, 174, 184, 0.15);
+  background: var(--ds-border, rgba(166, 174, 184, 0.15));
 }
 .jpt-tb-icon {
   padding: 6px 10px;
@@ -243,27 +261,27 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
   height: 8px;
   border-radius: 50%;
   margin-right: 8px;
-  background: #5A5A5E;
+  background: var(--ds-icon-disabled, #5A5A5E);
   transition: background 0.15s, box-shadow 0.15s;
 }
 #jpt-toolbar.jpt-tb-on .jpt-tb-dot {
-  background: #4BCE97;
+  background: var(--ds-icon-success, #4BCE97);
   box-shadow: 0 0 6px rgba(75, 206, 151, 0.5);
 }
-#jpt-toolbar.jpt-tb-off .jpt-tb-label { color: #96999E; }
+#jpt-toolbar.jpt-tb-off .jpt-tb-label { color: var(--ds-text-subtle, #96999E); }
 
 /* ─── Hover tooltip：bar 滑入顯示職種 / Milestone relates 任務 ─── */
 #jpt-hover-tip {
   position: fixed;
   z-index: 9990;       /* 略低於 toolbar，但仍能蓋過 timeline；別蓋過 modal/dropdown */
-  background: #282A2E;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: var(--ds-surface-overlay, #282A2E);
+  border: 1px solid var(--ds-border, rgba(255, 255, 255, 0.10));
   border-radius: 3px;
   padding: 0;
   font-family: 'Atlassian Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
-  color: #CECFD2;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  color: var(--ds-text, #CECFD2);
+  box-shadow: var(--ds-shadow-overlay, 0 6px 20px rgba(0, 0, 0, 0.5));
   pointer-events: auto;
 }
 .jpt-hover-tip-pt { max-width: 360px; padding: 6px 10px; width: auto; }
@@ -276,7 +294,7 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
 }
 .jpt-tip-label {
   font-size: 11px;
-  color: #96999E;
+  color: var(--ds-text-subtle, #96999E);
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
@@ -287,8 +305,8 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
 }
 .jpt-tip-role-chip {
   display: inline-block;
-  background: rgba(150, 207, 117, 0.18);
-  color: #B7E089;
+  background: var(--ds-background-success, rgba(150, 207, 117, 0.18));
+  color: var(--ds-text-success, #B7E089);
   border-radius: 3px;
   padding: 1px 8px;
   font-size: 11px;
@@ -300,11 +318,11 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
   top: 0;
   z-index: 1;
   padding: 8px 12px;
-  background: #282A2E;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--ds-surface-overlay, #282A2E);
+  border-bottom: 1px solid var(--ds-border, rgba(255, 255, 255, 0.08));
   font-size: 13px;
   font-weight: 600;
-  color: #FFFFFF;
+  color: var(--ds-text, #FFFFFF);
 }
 .jpt-tip-body { padding: 6px 12px 8px; }
 .jpt-tip-item {
@@ -318,23 +336,23 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
   width: 14px;
   text-align: center;
   margin-right: 6px;
-  color: #96999E;
+  color: var(--ds-text-subtle, #96999E);
 }
-.jpt-tip-done .jpt-tip-status { color: #4BCE97; }
-.jpt-tip-indeterminate .jpt-tip-status { color: #579DFF; }
+.jpt-tip-done .jpt-tip-status { color: var(--ds-text-success, #4BCE97); }
+.jpt-tip-indeterminate .jpt-tip-status { color: var(--ds-text-information, #579DFF); }
 .jpt-tip-key {
   flex: 0 0 auto;
-  color: #6CC3E0;
+  color: var(--ds-text-accent-blue, #6CC3E0);
   font-weight: 500;
   margin-right: 8px;
 }
 .jpt-tip-summary {
-  color: #CECFD2;
+  color: var(--ds-text, #CECFD2);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .jpt-tip-done .jpt-tip-key,
-.jpt-tip-done .jpt-tip-summary { color: #96999E; text-decoration: line-through; }
+.jpt-tip-done .jpt-tip-summary { color: var(--ds-text-subtle, #96999E); text-decoration: line-through; }
 
 /* 自訂捲軸 */
 #jpt-hover-tip::-webkit-scrollbar { width: 8px; }
@@ -348,8 +366,8 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
-  background: #282A2E;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: var(--ds-surface-overlay, #282A2E);
+  border: 1px solid var(--ds-border, rgba(255, 255, 255, 0.10));
   border-radius: 3px;
   padding: 4px 10px;
   font-size: 12px;
@@ -359,8 +377,11 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
   pointer-events: none;
 }
 .jpt-tb-flash.show { opacity: 1; }
-.jpt-tb-flash-ok { color: #4BCE97; }
-.jpt-tb-flash-warn { color: #F5CD47; border-color: rgba(245, 205, 71, 0.40); }
+.jpt-tb-flash-ok { color: var(--ds-text-success, #4BCE97); }
+.jpt-tb-flash-warn {
+  color: var(--ds-text-warning, #F5CD47);
+  border-color: var(--ds-border-warning, rgba(245, 205, 71, 0.40));
+}
 
 
 /* 工作天數浮動 overlay
@@ -376,8 +397,8 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
   align-items: center;
   padding: 2px 6px;
   border-radius: 3px;
-  background: rgba(87, 157, 255, 0.18);
-  color: #87B5FF;
+  background: var(--ds-background-information, rgba(87, 157, 255, 0.18));
+  color: var(--ds-text-information, #87B5FF);
   font-size: 11px;
   font-weight: 600;
   font-family: 'Roboto Mono', ui-monospace, Consolas, monospace;
@@ -385,4 +406,36 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
   line-height: 1;
   white-space: nowrap;
   pointer-events: none;
+}
+
+/* ─── Light 主題覆寫（body.jpt-theme-light 由 timeline_color.js 同步切換）
+ * 大部分色面已用 --ds-* tokens 自動跟主題；這裡只處理 token 不易表達的「半透明強調色」
+ * 邏輯：dark 模式用淡白色覆蓋，light 模式翻成淡黑色覆蓋；強調色從白底友善的色階來挑
+ */
+
+/* 週末 strip — dark: 白色 5% 蓋深底；light: 黑色 4% 蓋白底 */
+body.jpt-theme-light .jpt-cal-strip.jpt-cal-weekend {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+/* 國定假日 strip — light 模式下 alpha 拉高一點才看得到 */
+body.jpt-theme-light .jpt-cal-strip.jpt-cal-holiday {
+  background-color: rgba(220, 110, 50, 0.18);
+}
+
+/* Epic 虛線框 — light 模式換深紫，否則淡紫色在白底會幾近隱形 */
+body.jpt-theme-light .jpt-epic-highlight {
+  outline-color: rgba(124, 80, 165, 0.85) !important;
+}
+
+/* hover tip 自訂捲軸 — dark 用白色 thumb；light 反過來 */
+body.jpt-theme-light #jpt-hover-tip::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.20);
+}
+body.jpt-theme-light #jpt-hover-tip::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* toolbar handle hover — dark 用白色微亮；light 用黑色微亮 */
+body.jpt-theme-light .jpt-tb-handle:hover {
+  background: rgba(0, 0, 0, 0.06);
 }
