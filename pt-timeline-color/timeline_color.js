@@ -35,6 +35,7 @@
     epicStripe:        false,
     epicLockDrag:      false,    // 鎖定 Epic 拖曳/拉長（防誤動）
     hideCurrentMonth:  false,
+    hideIssueKey:      false,    // 隱藏左欄 issue key（如 ABC-1234）
     showWeekends:      false,
     showHolidays:      false,
     showWorkingDays:   false,   // hover/拖拉時 bar 結束日標籤加「(工作天 X 天)」
@@ -134,6 +135,7 @@
     r.setProperty('--jpt-ms-color', settings.msColor);
     // CSS 效果類 class 全部 gate on settings.enabled — 停用時務必同步移除
     document.body?.classList.toggle('jpt-hide-current-month', !!settings.hideCurrentMonth && !!settings.enabled);
+    document.body?.classList.toggle('jpt-hide-issue-key', !!settings.hideIssueKey && !!settings.enabled);
     // Milestone 鎖定前後拉長 — 固化為預設行為，但只在啟用時生效
     document.body?.classList.toggle('jpt-ms-lock-edges', !!settings.enabled);
     // Planning Task 鎖定拖曳/拉長 — 由 popup 設定控制
@@ -393,6 +395,7 @@
         if (changes.epicLockDrag !== undefined) settings.epicLockDrag = !!(changes.epicLockDrag.newValue);
         if (changes.epicStripe) settings.epicStripe = !!(changes.epicStripe.newValue);
         if (changes.hideCurrentMonth) settings.hideCurrentMonth = !!(changes.hideCurrentMonth.newValue);
+        if (changes.hideIssueKey !== undefined) settings.hideIssueKey = !!(changes.hideIssueKey.newValue);
         if (changes.showWeekends !== undefined) settings.showWeekends = !!(changes.showWeekends.newValue);
         if (changes.showHolidays !== undefined) settings.showHolidays = !!(changes.showHolidays.newValue);
         if (changes.showWorkingDays !== undefined) settings.showWorkingDays = !!(changes.showWorkingDays.newValue);
@@ -1094,7 +1097,7 @@
   };
   const stopActive = () => {
     if (DEBUG) console.log('[jpt] deactivate');
-    document.body?.classList.remove('jpt-active', 'jpt-hide-current-month', 'jpt-ms-lock-edges');
+    document.body?.classList.remove('jpt-active', 'jpt-hide-current-month', 'jpt-hide-issue-key', 'jpt-ms-lock-edges');
     if (domObserver) {
       domObserver.disconnect();
       domObserver = null;

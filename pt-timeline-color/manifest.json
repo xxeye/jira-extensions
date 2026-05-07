@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Jira PT Timeline Color",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "在 Jira Timeline 將 Planning Task / Milestone 的時間軸條塊染上區別色，可自訂顏色與 Milestone 顯示為菱形",
   "icons": {
     "16": "icons/icon16.png",

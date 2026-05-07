@@ -11,6 +11,7 @@ const DEFAULTS = {
   epicStripe:        false,
   epicLockDrag:      false,
   hideCurrentMonth:  false,
+  hideIssueKey:      false,
   showWeekends:      false,
   showHolidays:      false,
   showWorkingDays:   false,
@@ -29,6 +30,7 @@ const els = {
   epicStripe:       $('epic-stripe'),
   epicLockDrag:     $('epic-lock-drag'),
   hideCurrentMonth: $('hide-current-month'),
+  hideIssueKey:     $('hide-issue-key'),
   showWeekends:     $('show-weekends'),
   showHolidays:     $('show-holidays'),
   showWorkingDays:  $('show-working-days'),
@@ -59,6 +61,7 @@ const load = async () => {
   els.epicStripe.checked       = !!cfg.epicStripe;
   els.epicLockDrag.checked     = !!cfg.epicLockDrag;
   els.hideCurrentMonth.checked = !!cfg.hideCurrentMonth;
+  els.hideIssueKey.checked     = !!cfg.hideIssueKey;
   els.showWeekends.checked     = !!cfg.showWeekends;
   els.showHolidays.checked     = !!cfg.showHolidays;
   els.showWorkingDays.checked  = !!cfg.showWorkingDays;
@@ -76,6 +79,7 @@ const save = async () => {
     epicStripe:       els.epicStripe.checked,
     epicLockDrag:     els.epicLockDrag.checked,
     hideCurrentMonth: els.hideCurrentMonth.checked,
+    hideIssueKey:     els.hideIssueKey.checked,
     showWeekends:     els.showWeekends.checked,
     showHolidays:     els.showHolidays.checked,
     showWorkingDays:  els.showWorkingDays.checked,
@@ -104,6 +108,7 @@ els.ptLockDrag.addEventListener('change', save);
 els.epicStripe.addEventListener('change', save);
 els.epicLockDrag.addEventListener('change', save);
 els.hideCurrentMonth.addEventListener('change', save);
+els.hideIssueKey.addEventListener('change', save);
 els.showWeekends.addEventListener('change', save);
 els.showHolidays.addEventListener('change', save);
 els.showWorkingDays.addEventListener('change', save);

@@ -165,6 +165,11 @@ body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
   display: none !important;
 }
 
+/* 隱藏左欄 issue key（如 ABC-1234）— 不影響任務名 / Epic 圖示 */
+body.jpt-hide-issue-key [data-testid="roadmap.timeline-table-kit.ui.list-item-content.summary.key"] {
+  display: none !important;
+}
+
 /* 週末 / 國定假日 strip — 由 timeline_color.js 動態插入到 today-marker 的 parent
  * 用 absolute 定位 + pointer-events:none，不影響 Jira 互動。
  */
