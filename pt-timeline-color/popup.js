@@ -9,6 +9,7 @@ const DEFAULTS = {
   msShowProgress:    false,
   ptLockDrag:        false,
   epicStripe:        false,
+  epicLockDrag:      false,
   hideCurrentMonth:  false,
   showWeekends:      false,
   showHolidays:      false,
@@ -26,6 +27,7 @@ const els = {
   msShowProgress:   $('ms-show-progress'),
   ptLockDrag:       $('pt-lock-drag'),
   epicStripe:       $('epic-stripe'),
+  epicLockDrag:     $('epic-lock-drag'),
   hideCurrentMonth: $('hide-current-month'),
   showWeekends:     $('show-weekends'),
   showHolidays:     $('show-holidays'),
@@ -55,6 +57,7 @@ const load = async () => {
   els.msShowProgress.checked   = !!cfg.msShowProgress;
   els.ptLockDrag.checked       = !!cfg.ptLockDrag;
   els.epicStripe.checked       = !!cfg.epicStripe;
+  els.epicLockDrag.checked     = !!cfg.epicLockDrag;
   els.hideCurrentMonth.checked = !!cfg.hideCurrentMonth;
   els.showWeekends.checked     = !!cfg.showWeekends;
   els.showHolidays.checked     = !!cfg.showHolidays;
@@ -71,6 +74,7 @@ const save = async () => {
     msShowProgress:   els.msShowProgress.checked,
     ptLockDrag:       els.ptLockDrag.checked,
     epicStripe:       els.epicStripe.checked,
+    epicLockDrag:     els.epicLockDrag.checked,
     hideCurrentMonth: els.hideCurrentMonth.checked,
     showWeekends:     els.showWeekends.checked,
     showHolidays:     els.showHolidays.checked,
@@ -98,6 +102,7 @@ els.diamond.addEventListener('change', save);
 els.msShowProgress.addEventListener('change', save);
 els.ptLockDrag.addEventListener('change', save);
 els.epicStripe.addEventListener('change', save);
+els.epicLockDrag.addEventListener('change', save);
 els.hideCurrentMonth.addEventListener('change', save);
 els.showWeekends.addEventListener('change', save);
 els.showHolidays.addEventListener('change', save);

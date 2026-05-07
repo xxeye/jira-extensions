@@ -27,6 +27,7 @@ Jira Timeline 視覺強化插件 — 為 Planning Task / Milestone / Epic 加上
 | Milestone | 顯示為菱形 | OFF | bar 改為位於 due 日的菱形（時間點語意）|
 | Milestone | 顯示 relates to 完成度 | OFF | bar 上標示 `3/11 27%` 進度徽章 |
 | Epic | 依自定欄位顯示為虛線框 | OFF | `customfield_10919 = 啟用` 的 Epic 顯示虛線外框，便於追蹤特定 Epic |
+| Epic | 鎖定拖曳與拉長 | OFF | 防誤動 Epic 日期；鎖定下從左欄任務名開啟側欄 |
 | 時間軸介面 | 隱藏目前時段高亮 | OFF | 拿掉 Jira 預設的當月／當週／當季半透明色塊（今天藍線保留）|
 | 時間軸介面 | 標示週末 | OFF | 六、日欄淡灰 |
 | 時間軸介面 | 標示台灣國定假日 | OFF | 內建 2025–2027 假日，淡橘 |

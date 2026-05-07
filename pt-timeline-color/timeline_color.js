@@ -33,6 +33,7 @@
     msShowProgress:    false,
     ptLockDrag:        false,    // 鎖定 PT 拖曳/拉長（防誤動）
     epicStripe:        false,
+    epicLockDrag:      false,    // 鎖定 Epic 拖曳/拉長（防誤動）
     hideCurrentMonth:  false,
     showWeekends:      false,
     showHolidays:      false,
@@ -46,8 +47,9 @@
   const MS_CLASS         = 'jpt-ms-bar';
   const DIA_CLASS        = 'jpt-ms-diamond';
   const EPIC_HIGHLIGHT_CLASS = 'jpt-epic-highlight';
+  const EPIC_BAR_CLASS   = 'jpt-epic-bar';      // 標記所有 Epic（不分有無 highlight），給 lock-drag 用
   const PROGRESS_CLASS   = 'jpt-ms-progress';   // 進度 badge
-  const ALL_CLASSES = [PT_CLASS, MS_CLASS, DIA_CLASS, EPIC_HIGHLIGHT_CLASS];
+  const ALL_CLASSES = [PT_CLASS, MS_CLASS, DIA_CLASS, EPIC_HIGHLIGHT_CLASS, EPIC_BAR_CLASS];
 
   const TYPE_TO_CLASS = {
     'Planning Task': PT_CLASS,
@@ -136,6 +138,8 @@
     document.body?.classList.toggle('jpt-ms-lock-edges', !!settings.enabled);
     // Planning Task 鎖定拖曳/拉長 — 由 popup 設定控制
     document.body?.classList.toggle('jpt-pt-lock-drag', !!settings.ptLockDrag && !!settings.enabled);
+    // Epic 鎖定拖曳/拉長
+    document.body?.classList.toggle('jpt-epic-lock-drag', !!settings.epicLockDrag && !!settings.enabled);
   };
 
   // ─── 週末/假日 strip 渲染（universal：支援週/月/季 view）───
@@ -386,6 +390,7 @@
         // msLockEdges 已固化為預設行為，不再從 storage 讀取
         if (changes.msShowProgress !== undefined) settings.msShowProgress = !!(changes.msShowProgress.newValue);
         if (changes.ptLockDrag !== undefined) settings.ptLockDrag = !!(changes.ptLockDrag.newValue);
+        if (changes.epicLockDrag !== undefined) settings.epicLockDrag = !!(changes.epicLockDrag.newValue);
         if (changes.epicStripe) settings.epicStripe = !!(changes.epicStripe.newValue);
         if (changes.hideCurrentMonth) settings.hideCurrentMonth = !!(changes.hideCurrentMonth.newValue);
         if (changes.showWeekends !== undefined) settings.showWeekends = !!(changes.showWeekends.newValue);
@@ -489,17 +494,19 @@
     // 目標狀態
     const cls = type ? TYPE_TO_CLASS[type] : null;
     const isMs = cls === MS_CLASS;
-    const wantPT   = cls === PT_CLASS;
-    const wantMS   = isMs;
-    const wantDIA  = isMs && !!settings.msDiamond;
-    const wantEpic = !cls && type && EPIC_TYPE_NAMES.has(type)
-                       && !!settings.epicStripe && !!data.epicHighlight;
+    const isEpic = !cls && type && EPIC_TYPE_NAMES.has(type);
+    const wantPT      = cls === PT_CLASS;
+    const wantMS      = isMs;
+    const wantDIA     = isMs && !!settings.msDiamond;
+    const wantEpicBar = !!isEpic;   // 所有 Epic 都標 jpt-epic-bar，給 lock-drag CSS 用
+    const wantEpic    = isEpic && !!settings.epicStripe && !!data.epicHighlight;
 
     const cl = bar.classList;
-    if (cl.contains(PT_CLASS)             !== wantPT)   cl.toggle(PT_CLASS, wantPT);
-    if (cl.contains(MS_CLASS)             !== wantMS)   cl.toggle(MS_CLASS, wantMS);
-    if (cl.contains(DIA_CLASS)            !== wantDIA)  cl.toggle(DIA_CLASS, wantDIA);
-    if (cl.contains(EPIC_HIGHLIGHT_CLASS) !== wantEpic) cl.toggle(EPIC_HIGHLIGHT_CLASS, wantEpic);
+    if (cl.contains(PT_CLASS)             !== wantPT)      cl.toggle(PT_CLASS, wantPT);
+    if (cl.contains(MS_CLASS)             !== wantMS)      cl.toggle(MS_CLASS, wantMS);
+    if (cl.contains(DIA_CLASS)            !== wantDIA)     cl.toggle(DIA_CLASS, wantDIA);
+    if (cl.contains(EPIC_BAR_CLASS)       !== wantEpicBar) cl.toggle(EPIC_BAR_CLASS, wantEpicBar);
+    if (cl.contains(EPIC_HIGHLIGHT_CLASS) !== wantEpic)    cl.toggle(EPIC_HIGHLIGHT_CLASS, wantEpic);
 
     // Milestone 才顯示 badge；其他類型清掉（renderProgressBadge 自身冪等）
     renderProgressBadge(bar, isMs ? data.progress : null);
@@ -980,10 +987,13 @@
   document.addEventListener('mousedown', (e) => {
     const bar = e.target.closest?.('[data-testid*="draggable-bar-"][data-testid$="-container"]');
     if (!bar) { dragStart = null; return; }
-    // 鎖定 PT 拖曳：在 capture phase 攔下 mousedown，Jira 的 drag listener 收不到。
+    // 鎖定 PT / Epic 拖曳：在 capture phase 攔下 mousedown，Jira 的 drag listener 收不到。
     // 副作用：click-to-open 側欄也會失效（Jira 內部用 mousedown 啟動 click 流程）。
     // 鎖定狀態下用左欄任務名開啟側欄替代。
-    if (settings.enabled && settings.ptLockDrag && bar.classList.contains(PT_CLASS)) {
+    if (settings.enabled && (
+      (settings.ptLockDrag   && bar.classList.contains(PT_CLASS)) ||
+      (settings.epicLockDrag && bar.classList.contains(EPIC_BAR_CLASS))
+    )) {
       e.stopPropagation();
       e.preventDefault();
       dragStart = null;
