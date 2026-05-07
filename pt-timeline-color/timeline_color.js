@@ -1091,13 +1091,24 @@
     if (domObserver) return;
     if (DEBUG) console.log('[jpt] activate (timeline page)');
     document.body?.classList.add('jpt-active');   // 啟用時加入 — CSS 用此 gate 控制隱藏 dep line 等
+    // SPA 路由切走再回來時，stopActive 拿掉的 gated class（hide-current-month、
+    // hide-issue-key、lock-drag 等）必須在這裡重新套回，否則會卡到使用者下次手動
+    // toggle 設定才回來。曾發生「離開時間軸再回來，隱藏目前時段高亮失效」就是這個。
+    applyCssVars();
     onMutation();
     domObserver = new MutationObserver(onMutation);
     domObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-expanded'] });
   };
   const stopActive = () => {
     if (DEBUG) console.log('[jpt] deactivate');
-    document.body?.classList.remove('jpt-active', 'jpt-hide-current-month', 'jpt-hide-issue-key', 'jpt-ms-lock-edges');
+    document.body?.classList.remove(
+      'jpt-active',
+      'jpt-hide-current-month',
+      'jpt-hide-issue-key',
+      'jpt-ms-lock-edges',
+      'jpt-pt-lock-drag',
+      'jpt-epic-lock-drag',
+    );
     if (domObserver) {
       domObserver.disconnect();
       domObserver = null;
