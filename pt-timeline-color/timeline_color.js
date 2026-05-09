@@ -20,8 +20,9 @@
   let DEBUG = false;
   const TYPE_CACHE_KEY = 'jpt:type-cache:v4';     // 永久（issue type 不可改），跨 F5/路由保留
   // dataCache schema 從 v4 改 v5：移除 hasDates、新增 epicHighlight（依 customfield_10919）
-  const DATA_CACHE_KEY = 'jpt:data-cache:v5';
-  const LEGACY_KEYS    = ['jpt:issuetype-cache:v3', 'jpt:data-cache:v4'];
+  // v5 → v6：relates 內加 typeIconUrl / typeName（給 Milestone tooltip 顯示議題類型圖示）
+  const DATA_CACHE_KEY = 'jpt:data-cache:v6';
+  const LEGACY_KEYS    = ['jpt:issuetype-cache:v3', 'jpt:data-cache:v4', 'jpt:data-cache:v5'];
 
   // 預設設定（fallback；popup 未設過時用）
   // 註：msLockEdges / arrowScroll 已固化為預設行為，不再可設定（避免使用者誤關造成 bug）
@@ -553,6 +554,8 @@
   };
 
   // 從 issuelinks 抽出 relates 任務清單（給 hover tooltip 用）
+  // typeIconUrl / typeName：用來在 tooltip 每列前面顯示議題類型圖示，一眼辨識任務類型
+  // （Story / Task / Bug / Sub-task / Planning Task ...）
   const computeRelatesList = (issuelinks) => {
     if (!Array.isArray(issuelinks)) return [];
     const list = [];
@@ -560,11 +563,14 @@
       if (!isRelatesLink(link)) continue;
       const peer = link.outwardIssue || link.inwardIssue;
       if (!peer) continue;
+      const itype = peer.fields?.issuetype || {};
       list.push({
         key: peer.key,
         summary: peer.fields?.summary || '',
         statusName: peer.fields?.status?.name || '',
         statusCat: peer.fields?.status?.statusCategory?.key || '',
+        typeIconUrl: itype.iconUrl || '',
+        typeName: itype.name || '',
       });
     }
     // 排序：done → indeterminate → new
@@ -725,6 +731,7 @@
           ${data.relates.map(r => `
             <div class="jpt-tip-item jpt-tip-${escapeHtml(r.statusCat || 'new')}">
               <span class="jpt-tip-status">${STATUS_ICON[r.statusCat] || '·'}</span>
+              ${r.typeIconUrl ? `<img class="jpt-tip-type-icon" src="${escapeHtml(r.typeIconUrl)}" alt="${escapeHtml(r.typeName)}" title="${escapeHtml(r.typeName)}">` : '<span class="jpt-tip-type-icon jpt-tip-type-icon-empty"></span>'}
               <span class="jpt-tip-key">${escapeHtml(r.key)}</span>
               <span class="jpt-tip-summary">${escapeHtml(r.summary)}</span>
             </div>
