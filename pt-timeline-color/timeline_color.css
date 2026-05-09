@@ -348,6 +348,18 @@ body.jpt-hide-issue-key [data-testid="roadmap.timeline-table-kit.ui.list-item-co
 }
 .jpt-tip-done .jpt-tip-status { color: var(--ds-text-success, #4BCE97); }
 .jpt-tip-indeterminate .jpt-tip-status { color: var(--ds-text-information, #579DFF); }
+.jpt-tip-type-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  align-self: center;
+  vertical-align: middle;
+  object-fit: contain;
+  /* Atlassian issuetype 圖示為主題中性的彩色 glyph（透明背景），dark / light 兩主題皆能讀 */
+}
+.jpt-tip-type-icon-empty { display: inline-block; }
+.jpt-tip-done .jpt-tip-type-icon { opacity: 0.55; }
 .jpt-tip-key {
   flex: 0 0 auto;
   color: var(--ds-text-accent-blue, #6CC3E0);
