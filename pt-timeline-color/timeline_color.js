@@ -27,20 +27,20 @@
   // 預設設定（fallback；popup 未設過時用）
   // 註：msLockEdges / arrowScroll 已固化為預設行為，不再可設定（避免使用者誤關造成 bug）
   const DEFAULTS = {
-    enabled:           true,
-    ptColor:           '#6a9a23',
-    msColor:           '#FF8B00',
-    msDiamond:         false,
-    msShowProgress:    false,
-    ptLockDrag:        false,    // 鎖定 PT 拖曳/拉長（防誤動）
-    epicStripe:        false,
-    epicLockDrag:      false,    // 鎖定 Epic 拖曳/拉長（防誤動）
-    hideCurrentMonth:  false,
-    hideIssueKey:      false,    // 隱藏左欄 issue key（如 ABC-1234）
-    showWeekends:      false,
-    showHolidays:      false,
-    showWorkingDays:   false,   // hover/拖拉時 bar 結束日標籤加「(工作天 X 天)」
-    focusMode:         false,
+    enabled:           true,         // 主開關：所有渲染入口會 gate on 這個值（由浮動 toolbar 切換）
+    ptColor:           '#6a9a23',    // Planning Task bar 底色
+    msColor:           '#FF8B00',    // Milestone bar 底色（含菱形模式時的填色）
+    msDiamond:         true,         // Milestone 改顯示為菱形（位於 due 時間點）
+    msShowProgress:    true,         // Milestone bar 上加進度徽章（relates to 子任務完成數 / 百分比）
+    ptLockDrag:        true,         // 鎖定 PT 的拖曳與兩端拉長（防誤動；改從左欄任務名開啟側欄）
+    epicStripe:        false,        // Epic 依自定欄位（customfield_10919=啟用）顯示為虛線框
+    epicLockDrag:      true,         // 鎖定 Epic 的拖曳與兩端拉長（防誤動）
+    hideCurrentMonth:  true,         // 隱藏 Jira 內建「目前時段」整欄背景高亮（保留今天藍線）
+    hideIssueKey:      false,        // 隱藏左欄 issue key 文字（如 ABC-1234）
+    showWeekends:      true,         // 時間軸標示週末（六、日）背景條
+    showHolidays:      true,         // 時間軸標示台灣國定假日背景條
+    showWorkingDays:   true,         // Hover / 拖拉 bar 時，結束日標籤右側顯示工作天數（扣除週末與國定假日）
+    focusMode:         false,        // 展開 Epic 時自動 filter 為該 Epic 與其子任務
   };
   let settings = { ...DEFAULTS };
 
