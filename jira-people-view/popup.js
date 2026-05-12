@@ -166,21 +166,28 @@ const showLastRefreshTime = async () => {
   if (lr) lr.textContent = '上次更新：' + fmtTime(ts);
 };
 
+// 「名字 (職種)」格式；多隊用 / 串接，例如 dev/backend 共一隊時 → "Alice (dev/backend)"
+const formatPerson = (p) => (p && p.teams && p.teams.length) ? `${p.name} (${p.teams.join('/')})` : (p?.name || '');
+
 const showRefreshResult = (status, result) => {
+  // 優先用新欄位 added/removed（帶 team label），舊版退回 addedNames/removedNames
+  const added   = result.added   || (result.addedNames   || []).map(name => ({ name, teams: [] }));
+  const removed = result.removed || (result.removedNames || []).map(name => ({ name, teams: [] }));
+
   const parts = [];
   if (result.isFirstFetch) {
     parts.push(`✅ 首次抓取`);
-  } else if (result.addedNames.length === 0 && result.removedNames.length === 0) {
+  } else if (added.length === 0 && removed.length === 0) {
     parts.push(`✅ 無變化`);
   } else {
     parts.push(`✅ 已更新`);
-    if (result.addedNames.length) parts.push(`新增 ${result.addedNames.length} 人 (${result.addedNames.join(', ')})`);
-    if (result.removedNames.length) parts.push(`移除 ${result.removedNames.length} 人 (${result.removedNames.join(', ')})`);
+    if (added.length)   parts.push(`新增 ${added.length} 人 (${added.map(formatPerson).join(', ')})`);
+    if (removed.length) parts.push(`移除 ${removed.length} 人 (${removed.map(formatPerson).join(', ')})`);
   }
   parts.push(`共 ${result.totalMembers} 人 / ${result.teamCount} 隊`);
   status.textContent = parts.join('　·　');
   status.title = parts.join('\n');
-  status.style.color = (result.addedNames.length || result.removedNames.length || result.isFirstFetch) ? '#4BCE97' : 'var(--text-dim)';
+  status.style.color = (added.length || removed.length || result.isFirstFetch) ? '#4BCE97' : 'var(--text-dim)';
 };
 
 // 偵測有沒有開著的 Atlassian 分頁，決定按鈕能不能用

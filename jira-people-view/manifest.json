@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Jira People View",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Jira Timeline 人力視圖：以人為主軸的工作量 heatmap，展開可看每人任務排程",
   "icons": {
     "16": "icons/icon16.png",

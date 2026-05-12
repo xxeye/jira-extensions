@@ -178,20 +178,37 @@ const JpvTeams = (() => {
   };
 
   // popup 用：重抓所有 ROLE_TO_TEAM_ID 列出的 team roster，更新 cache
-  // 回傳：{ teamCount, totalMembers, addedNames, removedNames, isFirstFetch, refreshedAt }
+  // 回傳：{
+  //   teamCount, totalMembers,
+  //   added / removed: [{ name, teams: [roleLabels...] }]（diff 結果，含該人歸屬的職種 label）
+  //   addedNames / removedNames: [name, ...]（向後相容欄位）
+  //   isFirstFetch, refreshedAt, failures,
+  // }
   const LAST_REFRESH_KEY = 'jpv:teams-last-refresh';
 
   const refreshAllRosters = async () => {
     const teamIds = [...new Set(Object.values(ROLE_TO_TEAM_ID).filter(Boolean))];
 
+    // 反查表：teamId → [role labels...]
+    // many-to-one：例如 dev / backend 同一隊（System），新增者 teams 會顯示 'dev/backend'
+    const teamIdToRoles = {};
+    for (const [role, tid] of Object.entries(ROLE_TO_TEAM_ID)) {
+      if (!tid) continue;
+      (teamIdToRoles[tid] ||= []).push(role);
+    }
+    const labelForTeamId = (tid) => (teamIdToRoles[tid] || []).join('/');
+
     // Step 1: 收集舊名單（cache）
-    const oldMembers = new Map();   // accountId → name
+    const oldMembers = new Map();      // accountId → name
+    const oldTeamsByAid = new Map();   // accountId → Set<teamId>
     for (const tid of teamIds) {
       const cached = await readCache(tid);
       if (cached) {
         for (const m of cached.members) {
           if (EXCLUDED_ACCOUNT_IDS.has(m.accountId)) continue;
           if (!oldMembers.has(m.accountId)) oldMembers.set(m.accountId, m.name || m.accountId);
+          if (!oldTeamsByAid.has(m.accountId)) oldTeamsByAid.set(m.accountId, new Set());
+          oldTeamsByAid.get(m.accountId).add(tid);
         }
       }
     }
@@ -199,6 +216,7 @@ const JpvTeams = (() => {
 
     // Step 2: 抓新名單
     const newMembers = new Map();
+    const newTeamsByAid = new Map();
     const failures = [];
     for (const tid of teamIds) {
       try {
@@ -207,6 +225,8 @@ const JpvTeams = (() => {
         for (const m of members) {
           if (EXCLUDED_ACCOUNT_IDS.has(m.accountId)) continue;
           if (!newMembers.has(m.accountId)) newMembers.set(m.accountId, m.name || m.accountId);
+          if (!newTeamsByAid.has(m.accountId)) newTeamsByAid.set(m.accountId, new Set());
+          newTeamsByAid.get(m.accountId).add(tid);
         }
       } catch (e) {
         console.warn('[jpv teams] refresh failed for', tid, e);
@@ -214,11 +234,19 @@ const JpvTeams = (() => {
       }
     }
 
-    // Step 3: diff
-    const addedNames = [];
-    const removedNames = [];
-    for (const [aid, name] of newMembers) if (!oldMembers.has(aid)) addedNames.push(name);
-    for (const [aid, name] of oldMembers) if (!newMembers.has(aid)) removedNames.push(name);
+    // Step 3: diff（依 accountId 算，順便帶上該人歸屬的職種 label 給 popup 顯示）
+    const added = [];
+    const removed = [];
+    for (const [aid, name] of newMembers) {
+      if (oldMembers.has(aid)) continue;
+      const teams = [...(newTeamsByAid.get(aid) || [])].map(labelForTeamId).filter(Boolean);
+      added.push({ name, teams });
+    }
+    for (const [aid, name] of oldMembers) {
+      if (newMembers.has(aid)) continue;
+      const teams = [...(oldTeamsByAid.get(aid) || [])].map(labelForTeamId).filter(Boolean);
+      removed.push({ name, teams });
+    }
 
     const refreshedAt = Date.now();
     await new Promise(r => chrome.storage.local.set({ [LAST_REFRESH_KEY]: refreshedAt }, r));
@@ -226,7 +254,10 @@ const JpvTeams = (() => {
     return {
       teamCount: teamIds.length,
       totalMembers: newMembers.size,
-      addedNames, removedNames,
+      added,
+      removed,
+      addedNames:   added.map(a => a.name),    // 向後相容
+      removedNames: removed.map(r => r.name),
       isFirstFetch,
       refreshedAt,
       failures,
