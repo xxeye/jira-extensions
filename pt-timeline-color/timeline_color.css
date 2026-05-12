@@ -366,12 +366,21 @@ body.jpt-hide-issue-key [data-testid="roadmap.timeline-table-kit.ui.list-item-co
   font-weight: 500;
   margin-right: 8px;
 }
+.jpt-tip-daterange {
+  flex: 0 0 auto;
+  color: var(--ds-text-accent-blue, #6CC3E0);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  margin-right: 8px;
+  white-space: nowrap;
+}
 .jpt-tip-summary {
   color: var(--ds-text, #CECFD2);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .jpt-tip-done .jpt-tip-key,
+.jpt-tip-done .jpt-tip-daterange,
 .jpt-tip-done .jpt-tip-summary { color: var(--ds-text-subtle, #96999E); text-decoration: line-through; }
 
 /* 自訂捲軸 */

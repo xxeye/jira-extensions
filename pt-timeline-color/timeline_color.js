@@ -21,8 +21,9 @@
   const TYPE_CACHE_KEY = 'jpt:type-cache:v4';     // 永久（issue type 不可改），跨 F5/路由保留
   // dataCache schema 從 v4 改 v5：移除 hasDates、新增 epicHighlight（依 customfield_10919）
   // v5 → v6：relates 內加 typeIconUrl / typeName（給 Milestone tooltip 顯示議題類型圖示）
-  const DATA_CACHE_KEY = 'jpt:data-cache:v6';
-  const LEGACY_KEYS    = ['jpt:issuetype-cache:v3', 'jpt:data-cache:v4', 'jpt:data-cache:v5'];
+  // v6 → v7：每筆 issue 新增 startDate / dueDate（給 Milestone hover 顯示 relates 的日期範圍）
+  const DATA_CACHE_KEY = 'jpt:data-cache:v7';
+  const LEGACY_KEYS    = ['jpt:issuetype-cache:v3', 'jpt:data-cache:v4', 'jpt:data-cache:v5', 'jpt:data-cache:v6'];
 
   // 預設設定（fallback；popup 未設過時用）
   // 註：msLockEdges / arrowScroll 已固化為預設行為，不再可設定（避免使用者誤關造成 bug）
@@ -65,6 +66,7 @@
   // Jira 自訂欄位（依專案而定）
   const FIELD_ROLE            = 'customfield_10773';   // 職種（多選 — 對應 plan/art/data/...）
   const FIELD_EPIC_HIGHLIGHT  = 'customfield_10919';   // Epic 是否要顯示為虛線框（單選，"啟用" 才畫）
+  const FIELD_START_DATE      = 'customfield_10015';   // Jira Cloud Start Date（給 Milestone hover 顯示日期範圍）
 
   // ─── 選擇器 ──────────────────────────────────────────
   const SEL_LIST_ITEM = '[data-testid^="roadmap.timeline-table.components.list-item.container-"]';
@@ -597,7 +599,8 @@
     keys.forEach(k => pending.add(k));
     try {
       // 一律抓 cf[10773] 職種（給 PT hover）+ cf[10919] Epic 高亮旗標 + issuelinks（給 progress badge / Milestone hover）
-      const fields = ['issuetype', FIELD_ROLE, FIELD_EPIC_HIGHLIGHT, 'issuelinks'];
+      //      + duedate / cf[10015] Start Date（給 Milestone hover 顯示每筆 relates 的日期範圍）
+      const fields = ['issuetype', FIELD_ROLE, FIELD_EPIC_HIGHLIGHT, FIELD_START_DATE, 'duedate', 'issuelinks'];
       const issues = await JiraApi.searchByKeys(keys, fields);
       const now = Date.now();
       const seen = new Set();
@@ -614,15 +617,18 @@
           : [];
         const progress = (type === 'Milestone') ? computeMsProgress(f.issuelinks) : null;
         const relates = (type === 'Milestone') ? computeRelatesList(f.issuelinks) : [];
+        // 任務自身的起訖日期（'YYYY-MM-DD' 或 null）— Milestone hover 用該筆 relates 對應 issue 的 dataCache 查
+        const startDate = f[FIELD_START_DATE] || null;
+        const dueDate   = f.duedate || null;
         if (type !== null) typeCache.set(issue.key, type);
-        dataCache.set(issue.key, { epicHighlight, progress, roles, relates, ts: now, _jitter: jitter() });
+        dataCache.set(issue.key, { epicHighlight, progress, roles, relates, startDate, dueDate, ts: now, _jitter: jitter() });
         seen.add(issue.key);
       }
       // 沒回傳的 key（已封存 / 權限不足）也標個空快取免得反覆重試
       for (const k of keys) {
         if (seen.has(k)) continue;
         if (!typeCache.has(k)) typeCache.set(k, null);
-        dataCache.set(k, { epicHighlight: false, progress: null, roles: [], relates: [], ts: now, _jitter: jitter() });
+        dataCache.set(k, { epicHighlight: false, progress: null, roles: [], relates: [], startDate: null, dueDate: null, ts: now, _jitter: jitter() });
       }
       persistTypeCache();
       persistDataCache();
@@ -699,6 +705,8 @@
   const idToKey = new Map();   // 由 scan() 維護：numeric id → issue key
   let hoverTipEl = null;
   let hoverTipHideTimer = null;
+  let lazyFetchTimer = null;          // Milestone hover 補抓 peer 起訖日的 debounce timer
+  const LAZY_FETCH_DELAY_MS = 400;    // 滑鼠停留 > 400ms 才打 API 補抓（避免滑鼠掃過大量 milestone 連續打 API）
 
   const STATUS_ICON = { done: '✓', indeterminate: '◐', new: '○' };
 
@@ -715,6 +723,16 @@
 
   const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+  // 'YYYY-MM-DD' → 'M/D'；空值回 '-'
+  const fmtMonthDay = (iso) => {
+    if (!iso) return '-';
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    if (!m) return '-';
+    return `${parseInt(m[2], 10)}/${parseInt(m[3], 10)}`;
+  };
+  // 「起 ~ 訖」字串；任一沒填補 '-'，都沒填顯示 '- ~ -'
+  const fmtDateRange = (start, due) => `${fmtMonthDay(start)} ~ ${fmtMonthDay(due)}`;
+
   const buildTipHtml = (type, data) => {
     if (type === 'Planning Task') {
       if (!data.roles?.length) return null;
@@ -728,14 +746,19 @@
       return `
         <div class="jpt-tip-header">Relates to · ${done}／${total} 完成${wip ? `（含 ${wip} 進行中）` : ''}</div>
         <div class="jpt-tip-body">
-          ${data.relates.map(r => `
+          ${data.relates.map(r => {
+            // 每筆 relates 任務的 start/due 日期，需從 dataCache 查（issuelinks 不會回 peer 的日期）
+            // 沒抓過或抓不到 → fmtMonthDay 自動回 '-'
+            const peer = dataCache.get(r.key);
+            const dateRange = fmtDateRange(peer?.startDate, peer?.dueDate);
+            return `
             <div class="jpt-tip-item jpt-tip-${escapeHtml(r.statusCat || 'new')}">
               <span class="jpt-tip-status">${STATUS_ICON[r.statusCat] || '·'}</span>
               ${r.typeIconUrl ? `<img class="jpt-tip-type-icon" src="${escapeHtml(r.typeIconUrl)}" alt="${escapeHtml(r.typeName)}" title="${escapeHtml(r.typeName)}">` : '<span class="jpt-tip-type-icon jpt-tip-type-icon-empty"></span>'}
-              <span class="jpt-tip-key">${escapeHtml(r.key)}</span>
+              <span class="jpt-tip-daterange" title="${escapeHtml(r.key)}">${escapeHtml(dateRange)}</span>
               <span class="jpt-tip-summary">${escapeHtml(r.summary)}</span>
-            </div>
-          `).join('')}
+            </div>`;
+          }).join('')}
         </div>`;
     }
     return null;
@@ -764,15 +787,39 @@
     const tip = ensureHoverTip();
     clearTimeout(hoverTipHideTimer);
     tip.innerHTML = html;
+    tip.dataset.key = key;   // 標記是哪個任務的 tip — lazy 補抓完才知道要不要更新
     tip.className = `jpt-hover-tip-${type === 'Planning Task' ? 'pt' : 'ms'}`;
     tip.style.display = 'block';
     // 等下一個 frame 拿正確尺寸再定位
     requestAnimationFrame(() => positionTipAboveBar(bar));
+
+    // Milestone：補抓尚未在 dataCache 的 relates 任務（issuelinks 不會回 peer 的起訖日，
+    // 必須對每個 relates key 個別查）。先 debounce — 滑鼠掃過不打 API，真的停留才打。
+    // 完成後若 tip 還在顯示同一個 milestone 才更新 HTML。
+    clearTimeout(lazyFetchTimer);
+    if (type === 'Milestone' && Array.isArray(data.relates) && data.relates.length) {
+      const missing = data.relates.map(r => r.key).filter(k => k && !dataCache.has(k) && !pending.has(k));
+      if (missing.length) {
+        lazyFetchTimer = setTimeout(async () => {
+          // 起跑前再 check 一次 — 滑鼠已離開或換 bar 就不打
+          if (!hoverTipEl || hoverTipEl.style.display !== 'block' || hoverTipEl.dataset.key !== key) return;
+          for (let i = 0; i < missing.length; i += BATCH_SIZE) {
+            await fetchTypes(missing.slice(i, i + BATCH_SIZE));
+          }
+          if (hoverTipEl && hoverTipEl.style.display === 'block' && hoverTipEl.dataset.key === key) {
+            const fresh = dataCache.get(key) || data;
+            hoverTipEl.innerHTML = buildTipHtml(type, fresh) || hoverTipEl.innerHTML;
+            requestAnimationFrame(() => positionTipAboveBar(bar));
+          }
+        }, LAZY_FETCH_DELAY_MS);
+      }
+    }
   };
 
   const hideHoverTip = () => {
     if (!hoverTipEl) return;
     clearTimeout(hoverTipHideTimer);
+    clearTimeout(lazyFetchTimer);   // 滑鼠離開 → 取消還沒打的 peer 起訖日補抓
     hoverTipHideTimer = setTimeout(() => { hoverTipEl.style.display = 'none'; }, 150);
   };
 
