@@ -33,7 +33,8 @@
     msColor:           '#FF8B00',    // Milestone bar 底色（含菱形模式時的填色）
     msDiamond:         true,         // Milestone 改顯示為菱形（位於 due 時間點）
     msShowProgress:    true,         // Milestone bar 上加進度徽章（relates to 子任務完成數 / 百分比）
-    ptLockDrag:        true,         // 鎖定 PT 的拖曳與兩端拉長（防誤動；改從左欄任務名開啟側欄）
+    ptLockDrag:        true,         // Prevent PT drag and resize.
+    ptTargetEndShade:  false,        // Darken the Target end -> Due segment.
     epicStripe:        false,        // Epic 依自定欄位（customfield_10919=啟用）顯示為虛線框
     epicLockDrag:      true,         // 鎖定 Epic 的拖曳與兩端拉長（防誤動）
     hideCurrentMonth:  true,         // 隱藏 Jira 內建「目前時段」整欄背景高亮（保留今天藍線）
@@ -51,8 +52,9 @@
   const DIA_CLASS        = 'jpt-ms-diamond';
   const EPIC_HIGHLIGHT_CLASS = 'jpt-epic-highlight';
   const EPIC_BAR_CLASS   = 'jpt-epic-bar';      // 標記所有 Epic（不分有無 highlight），給 lock-drag 用
-  const PROGRESS_CLASS   = 'jpt-ms-progress';   // 進度 badge
-  const ALL_CLASSES = [PT_CLASS, MS_CLASS, DIA_CLASS, EPIC_HIGHLIGHT_CLASS, EPIC_BAR_CLASS];
+  const PROGRESS_CLASS   = 'jpt-ms-progress';
+  const PT_TARGET_SHADE_CLASS = 'jpt-pt-target-end-shade';
+  const ALL_CLASSES = [PT_CLASS, MS_CLASS, DIA_CLASS, EPIC_HIGHLIGHT_CLASS, EPIC_BAR_CLASS, PT_TARGET_SHADE_CLASS];
 
   const TYPE_TO_CLASS = {
     'Planning Task': PT_CLASS,
@@ -67,6 +69,7 @@
   const FIELD_ROLE            = 'customfield_10773';   // 職種（多選 — 對應 plan/art/data/...）
   const FIELD_EPIC_HIGHLIGHT  = 'customfield_10919';   // Epic 是否要顯示為虛線框（單選，"啟用" 才畫）
   const FIELD_START_DATE      = 'customfield_10015';   // Jira Cloud Start Date（給 Milestone hover 顯示日期範圍）
+  const FIELD_TARGET_END      = 'customfield_10023'; // Target end date
 
   // ─── 選擇器 ──────────────────────────────────────────
   const SEL_LIST_ITEM = '[data-testid^="roadmap.timeline-table.components.list-item.container-"]';
@@ -129,7 +132,13 @@
     return age < (DATA_TTL_MS + jitter);
   };
   // 「需要 fetch」= type 沒抓過 OR 動態資料過期
-  const needsFetch = (key) => !typeCache.has(key) || !isDataFresh(dataCache.get(key));
+  const needsFetch = (key) => {
+    const entry = dataCache.get(key);
+    if (!typeCache.has(key) || !isDataFresh(entry)) return true;
+    return settings.ptTargetEndShade
+      && typeCache.get(key) === 'Planning Task'
+      && !Object.prototype.hasOwnProperty.call(entry || {}, 'targetEndDate');
+  };
 
   // ─── 設定：套到 :root CSS 變數 + body class ─────────
   const applyCssVars = () => {
@@ -272,24 +281,35 @@
   // ─── Focus Mode ─────────────────────────────────────
   // 偵測哪個 Epic 被展開（aria-expanded="true"），直接改 URL ?issueParent=<id>
   // 觸發 Jira 內建篩選機制 — 不模擬 dropdown 點擊，避免 UI 干擾。
+  // Jira tree 允許多個 Epic 同時展開。由 MutationObserver 記住真正從
+  // aria-expanded=false 變成 true 的項目，不能用 DOM 順序猜最新展開項目。
+  let lastExpandedEpicId = null;
   const findExpandedEpicItem = () => {
     const items = document.querySelectorAll(SEL_LIST_ITEM);
+    let first = null;
+    let current = null;
     for (const item of items) {
-      if (item.querySelector('[aria-expanded="true"]')) return item;
+      if (!item.querySelector('[aria-expanded="true"]')) continue;
+      if (!first) first = item;
+      const id = extractIssueId(item);
+      if (id === lastExpandedEpicId) return item;
+      if (id === myFilterId) current = item;
     }
-    return null;
+    return current || first;
   };
 
   const getUrlIssueParent = () =>
     new URL(location.href).searchParams.get('issueParent');
 
-  // 透過 history.pushState + popstate 事件改 URL，Jira React router 會自動 react
+  // 透過 history.replaceState + popstate 事件改 URL，Jira React router 會自動 react。
+  // 用 replaceState 而非 pushState：每次展開 Epic 都 push 會把歷史塞滿 filter 項，
+  // 且按「上一頁」後 updateFocus 會立刻把 filter 寫回去 — 等於上一頁失效。
   const setUrlIssueParent = (idOrNull) => {
     const url = new URL(location.href);
     if (idOrNull) url.searchParams.set('issueParent', idOrNull);
     else url.searchParams.delete('issueParent');
     if (url.toString() === location.href) return;
-    history.pushState({}, '', url.toString());
+    history.replaceState(history.state, '', url.toString());
     window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
@@ -395,6 +415,7 @@
         // msLockEdges 已固化為預設行為，不再從 storage 讀取
         if (changes.msShowProgress !== undefined) settings.msShowProgress = !!(changes.msShowProgress.newValue);
         if (changes.ptLockDrag !== undefined) settings.ptLockDrag = !!(changes.ptLockDrag.newValue);
+        if (changes.ptTargetEndShade !== undefined) settings.ptTargetEndShade = !!(changes.ptTargetEndShade.newValue);
         if (changes.epicLockDrag !== undefined) settings.epicLockDrag = !!(changes.epicLockDrag.newValue);
         if (changes.epicStripe) settings.epicStripe = !!(changes.epicStripe.newValue);
         if (changes.hideCurrentMonth) settings.hideCurrentMonth = !!(changes.hideCurrentMonth.newValue);
@@ -413,6 +434,7 @@
           // 其他設定變動只在啟用時重渲染；停用時不能因任意 storage 寫入觸發畫面
           // （例如 jpt-toolbar-pos 拖曳會寫 storage，但不該重畫畫面）
           rerenderAll(); drawHolidayStrips(); scheduleUpdateFocus();
+          if (changes.ptTargetEndShade !== undefined && settings.ptTargetEndShade) scheduleScan();
         }
       } else if (area === 'local' && changes.cacheBuster) {
         // 「立即重新整理」按鈕：清快取，重新 fetch + render
@@ -489,6 +511,31 @@
   // 之前無條件 remove(...ALL_CLASSES) + add 會在新一輪掃描期間短暫露出 Jira
   // 預設樣式（捲動時尤其明顯），現在 class 沒變就完全不寫入。
   // badge 透過 renderProgressBadge 冪等處理（只在內容改變時才動 DOM）。
+  const parseDateOnlyMs = (value) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value || '');
+    return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : NaN;
+  };
+
+  const renderPtTargetEndShade = (bar, data) => {
+    const clear = () => {
+      bar.classList.remove(PT_TARGET_SHADE_CLASS);
+      bar.style.removeProperty('--jpt-target-end-ratio');
+    };
+    if (!settings.ptTargetEndShade || !data) { clear(); return; }
+    const start = parseDateOnlyMs(data.startDate);
+    const target = parseDateOnlyMs(data.targetEndDate);
+    const due = parseDateOnlyMs(data.dueDate);
+    if (![start, target, due].every(Number.isFinite) || !(start <= target && target <= due)) {
+      clear();
+      return;
+    }
+    const dayMs = 86_400_000;
+    const totalDays = Math.floor((due - start) / dayMs) + 1;
+    const targetOffsetDays = Math.floor((target - start) / dayMs);
+    const ratio = Math.max(0, Math.min(1, targetOffsetDays / totalDays));
+    bar.style.setProperty('--jpt-target-end-ratio', `${(ratio * 100).toFixed(3)}%`);
+    bar.classList.add(PT_TARGET_SHADE_CLASS);
+  };
   const applyColor = (issueId, issueKey) => {
     if (!settings.enabled) return;  // 防呆：停用時絕不上色（含已排隊的 scan timer）
     if (!typeCache.has(issueKey)) return;  // 還沒抓過 type，等 fetch 完才上色
@@ -515,6 +562,7 @@
     if (cl.contains(EPIC_HIGHLIGHT_CLASS) !== wantEpic)    cl.toggle(EPIC_HIGHLIGHT_CLASS, wantEpic);
 
     // Milestone 才顯示 badge；其他類型清掉（renderProgressBadge 自身冪等）
+    renderPtTargetEndShade(bar, wantPT ? data : null);
     renderProgressBadge(bar, isMs ? data.progress : null);
   };
 
@@ -558,6 +606,19 @@
   // 從 issuelinks 抽出 relates 任務清單（給 hover tooltip 用）
   // typeIconUrl / typeName：用來在 tooltip 每列前面顯示議題類型圖示，一眼辨識任務類型
   // （Story / Task / Bug / Sub-task / Planning Task ...）
+  // Apply at fetch time and again at render time so cached lists cannot retain an old order.
+  const RELATES_STATUS_ORDER = { indeterminate: 0, new: 1, done: 2 };
+  const sortRelatesList = (items) => items.slice().sort((a, b) => {
+    const statusOrder = (RELATES_STATUS_ORDER[a.statusCat] ?? 0) - (RELATES_STATUS_ORDER[b.statusCat] ?? 0);
+    if (statusOrder !== 0) return statusOrder;
+    const typeOrder = (a.typeName || '').localeCompare(b.typeName || '', undefined, { numeric: true, sensitivity: 'base' });
+    if (typeOrder !== 0) return typeOrder;
+    const summaryOrder = (a.summary || '').localeCompare(b.summary || '', undefined, { numeric: true, sensitivity: 'base' });
+    return summaryOrder !== 0
+      ? summaryOrder
+      : (a.key || '').localeCompare(b.key || '', undefined, { numeric: true, sensitivity: 'base' });
+  });
+
   const computeRelatesList = (issuelinks) => {
     if (!Array.isArray(issuelinks)) return [];
     const list = [];
@@ -575,10 +636,7 @@
         typeName: itype.name || '',
       });
     }
-    // 排序：done → indeterminate → new
-    const order = { done: 2, indeterminate: 1, new: 0 };
-    list.sort((a, b) => (order[a.statusCat] ?? 0) - (order[b.statusCat] ?? 0));
-    return list;
+    return sortRelatesList(list);
   };
 
   // ─── 批次查 issue 資料 ─────────────────────────────
@@ -594,13 +652,21 @@
   };
 
   const BATCH_SIZE = 50;
+  // API 持續失敗（session 過期 401 / infra 5xx）時的退避 — 沒有這個的話，
+  // 失敗的 key 不會進 cache，needsFetch 永遠 true，MutationObserver → scheduleScan
+  // 會每 300ms 重發同一批失敗請求無限重打
+  let fetchBackoffUntil = 0;
+  const FETCH_BACKOFF_MS = 60000;
   const fetchTypes = async (keys) => {
     if (!keys.length) return;
+    if (Date.now() < fetchBackoffUntil) return;
     keys.forEach(k => pending.add(k));
     try {
       // 一律抓 cf[10773] 職種（給 PT hover）+ cf[10919] Epic 高亮旗標 + issuelinks（給 progress badge / Milestone hover）
       //      + duedate / cf[10015] Start Date（給 Milestone hover 顯示每筆 relates 的日期範圍）
+      const includeTargetEnd = settings.ptTargetEndShade;
       const fields = ['issuetype', FIELD_ROLE, FIELD_EPIC_HIGHLIGHT, FIELD_START_DATE, 'duedate', 'issuelinks'];
+      if (includeTargetEnd) fields.push(FIELD_TARGET_END);
       const issues = await JiraApi.searchByKeys(keys, fields);
       const now = Date.now();
       const seen = new Set();
@@ -620,20 +686,34 @@
         // 任務自身的起訖日期（'YYYY-MM-DD' 或 null）— Milestone hover 用該筆 relates 對應 issue 的 dataCache 查
         const startDate = f[FIELD_START_DATE] || null;
         const dueDate   = f.duedate || null;
+        const rawTargetEnd = f[FIELD_TARGET_END];
+        const targetEndDate = includeTargetEnd
+          ? (typeof rawTargetEnd === 'string' ? rawTargetEnd : (rawTargetEnd?.value || null))
+          : undefined;
         if (type !== null) typeCache.set(issue.key, type);
-        dataCache.set(issue.key, { epicHighlight, progress, roles, relates, startDate, dueDate, ts: now, _jitter: jitter() });
+        dataCache.set(issue.key, {
+          epicHighlight, progress, roles, relates, startDate, dueDate,
+          ...(includeTargetEnd ? { targetEndDate } : {}),
+          ts: now, _jitter: jitter(),
+        });
         seen.add(issue.key);
       }
       // 沒回傳的 key（已封存 / 權限不足）也標個空快取免得反覆重試
       for (const k of keys) {
         if (seen.has(k)) continue;
         if (!typeCache.has(k)) typeCache.set(k, null);
-        dataCache.set(k, { epicHighlight: false, progress: null, roles: [], relates: [], startDate: null, dueDate: null, ts: now, _jitter: jitter() });
+        dataCache.set(k, {
+          epicHighlight: false, progress: null, roles: [], relates: [], startDate: null, dueDate: null,
+          ...(includeTargetEnd ? { targetEndDate: null } : {}),
+          ts: now, _jitter: jitter(),
+        });
       }
       persistTypeCache();
       persistDataCache();
+      fetchBackoffUntil = 0;
     } catch (e) {
-      console.warn('[jpt] fetchTypes failed', e);
+      fetchBackoffUntil = Date.now() + FETCH_BACKOFF_MS;
+      console.warn('[jpt] fetchTypes failed — 暫停補抓 60s', e);
     } finally {
       keys.forEach(k => pending.delete(k));
     }
@@ -696,8 +776,13 @@
   };
 
   // ─── Timeline 頁面偵測 + 啟用/停用切換 ──────────────
-  // 只在 URL 含 /timeline 時啟用 DOM observer 與 scan，省掉其他頁面的渲染損耗。
-  const isTimelinePage = () => location.pathname.includes('/timeline');
+  // 只在 timeline 頁啟用 DOM observer 與 scan，省掉其他頁面的渲染損耗。
+  // 判定與 floating_toolbar.js 共用同一份（該檔先載入並掛在 window 上），
+  // 避免兩處條件不同步造成「toolbar 有出現但染色沒啟用」。
+  const isTimelinePage = () =>
+    typeof window.__jptIsTimelinePage === 'function'
+      ? window.__jptIsTimelinePage()
+      : location.pathname.includes('/timeline');
 
   // ─── Hover tooltip：bar 滑入顯示職種 / Milestone relates 任務 ─────
   // 設計：tooltip 永遠在 bar **上方** 顯示（必要時翻到下方），避免遮到 Jira 原生
@@ -721,7 +806,7 @@
     return hoverTipEl;
   };
 
-  const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
   // 'YYYY-MM-DD' → 'M/D'；空值回 '-'
   const fmtMonthDay = (iso) => {
@@ -740,13 +825,14 @@
     }
     if (type === 'Milestone') {
       if (!data.relates?.length) return null;
-      const done = data.relates.filter(r => r.statusCat === 'done').length;
-      const wip  = data.relates.filter(r => r.statusCat === 'indeterminate').length;
-      const total = data.relates.length;
+      const relates = sortRelatesList(data.relates);
+      const done = relates.filter(r => r.statusCat === 'done').length;
+      const wip  = relates.filter(r => r.statusCat === 'indeterminate').length;
+      const total = relates.length;
       return `
         <div class="jpt-tip-header">Relates to · ${done}／${total} 完成${wip ? `（含 ${wip} 進行中）` : ''}</div>
         <div class="jpt-tip-body">
-          ${data.relates.map(r => {
+          ${relates.map(r => {
             // 每筆 relates 任務的 start/due 日期，需從 dataCache 查（issuelinks 不會回 peer 的日期）
             // 沒抓過或抓不到 → fmtMonthDay 自動回 '-'
             const peer = dataCache.get(r.key);
@@ -777,6 +863,21 @@
     hoverTipEl.style.top = top + 'px';
   };
 
+  // tooltip 顯示期間的目標 bar — 捲動時要跟著 bar 重新定位（不然 tip 留在原地脫節）
+  let hoverTipBar = null;
+  let tipScrollRaf = 0;
+  document.addEventListener('scroll', () => {
+    if (!hoverTipEl || hoverTipEl.style.display !== 'block' || !hoverTipBar) return;
+    if (tipScrollRaf) return;
+    tipScrollRaf = requestAnimationFrame(() => {
+      tipScrollRaf = 0;
+      if (!hoverTipEl || hoverTipEl.style.display !== 'block' || !hoverTipBar) return;
+      // bar 被 virtualizer 卸載 → tip 沒東西可跟，直接收
+      if (!hoverTipBar.isConnected) { hoverTipEl.style.display = 'none'; hoverTipBar = null; return; }
+      positionTipAboveBar(hoverTipBar);
+    });
+  }, true);   // capture：Jira timeline 的捲動發生在內層 scroller，不冒泡到 document
+
   const showHoverTip = (bar, key) => {
     if (!settings.enabled) return;
     const type = typeCache.get(key);
@@ -790,6 +891,7 @@
     tip.dataset.key = key;   // 標記是哪個任務的 tip — lazy 補抓完才知道要不要更新
     tip.className = `jpt-hover-tip-${type === 'Planning Task' ? 'pt' : 'ms'}`;
     tip.style.display = 'block';
+    hoverTipBar = bar;
     // 等下一個 frame 拿正確尺寸再定位
     requestAnimationFrame(() => positionTipAboveBar(bar));
 
@@ -820,7 +922,7 @@
     if (!hoverTipEl) return;
     clearTimeout(hoverTipHideTimer);
     clearTimeout(lazyFetchTimer);   // 滑鼠離開 → 取消還沒打的 peer 起訖日補抓
-    hoverTipHideTimer = setTimeout(() => { hoverTipEl.style.display = 'none'; }, 150);
+    hoverTipHideTimer = setTimeout(() => { hoverTipEl.style.display = 'none'; hoverTipBar = null; }, 150);
   };
 
   // 砍掉 Milestone 結束日標籤的「(N 天)」時長後綴 — 時間點不需顯示時長
@@ -1042,6 +1144,7 @@
   let dragStart = null;
   let wdDragLocked = false;  // 拖拉中：mouseout 不收 overlay（cursor 常離開 bar 範圍）
   document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;   // 只攔左鍵 — 右鍵選單 / 中鍵不該被鎖定邏輯吞掉
     const bar = e.target.closest?.('[data-testid*="draggable-bar-"][data-testid$="-container"]');
     if (!bar) { dragStart = null; return; }
     // 鎖定 PT / Epic 拖曳：在 capture phase 攔下 mousedown，Jira 的 drag listener 收不到。
@@ -1135,10 +1238,24 @@
       if (key && typeCache.has(key)) applyColor(id, key);
     }
   };
+  // drawHolidayStrips 內含 getBoundingClientRect（強制 reflow），不能每個 mutation
+  // batch 都直接跑 — 捲動/拖曳期間 Jira virtualizer 高頻觸發，會變效能熱點
+  let stripTimer = null;
+  const scheduleDrawHolidayStrips = () => {
+    if (stripTimer) return;
+    stripTimer = setTimeout(() => { stripTimer = null; drawHolidayStrips(); }, 200);
+  };
   const onMutation = (mutations) => {
+    for (const mutation of mutations || []) {
+      if (mutation.type !== 'attributes' || mutation.attributeName !== 'aria-expanded') continue;
+      if (mutation.target.getAttribute('aria-expanded') !== 'true') continue;
+      const item = mutation.target.closest?.(SEL_LIST_ITEM);
+      const id = item ? extractIssueId(item) : null;
+      if (id) lastExpandedEpicId = id;
+    }
     applyCachedColorToAddedItems(mutations);
     scheduleScan();
-    drawHolidayStrips();
+    scheduleDrawHolidayStrips();
     scheduleUpdateFocus();
   };
   const startActive = () => {
@@ -1171,6 +1288,7 @@
     if (scanTimer) { clearTimeout(scanTimer); scanTimer = null; }
     if (scanRetryTimer) { clearTimeout(scanRetryTimer); scanRetryTimer = null; }
     if (updateFocusTimer) { clearTimeout(updateFocusTimer); updateFocusTimer = null; }
+    if (stripTimer) { clearTimeout(stripTimer); stripTimer = null; }
     // 即使 observer 沒在跑，也要把殘留的 class / badge 清乾淨（停用時務必收尾）
     document.querySelectorAll(`.${PT_CLASS}, .${MS_CLASS}, .${DIA_CLASS}, .${EPIC_HIGHLIGHT_CLASS}`).forEach(el => {
       el.classList.remove(...ALL_CLASSES);

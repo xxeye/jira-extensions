@@ -32,15 +32,20 @@
   cursor: pointer;
   user-select: none;
   transition: background 0.15s, box-shadow 0.15s, color 0.15s;
+  overflow: hidden;
+  isolation: isolate;
 }
 #jpv-launch:hover {
-  background: var(--ds-background-neutral-hovered, #38414A);
+  background: var(--ds-surface-raised, #2C333A);
+  border-color: var(--ds-border-focused, #669DF1);
+  box-shadow: 0 2px 10px rgba(9, 30, 66, 0.35);
   color: var(--ds-text, #CECFD2);
 }
 #jpv-launch.dragging {
+  background: var(--ds-surface-raised, #2C333A);
+  border-color: var(--ds-border-focused, #669DF1);
   box-shadow: 0 6px 28px rgba(102, 157, 241, 0.4);
-  background: var(--ds-background-neutral-hovered, #38414A);
-  opacity: 0.9;
+  opacity: 1;
 }
 
 /* 拖曳手把 — 唯一可拖曳的區塊（其他區域只負責 click → launchView）*/
@@ -132,7 +137,11 @@
 }
 .jpv-close:hover,
 .jpv-refresh:hover { background: rgba(255,255,255,0.06); color: #CECFD2; }
-.jpv-refresh:active { transform: rotate(180deg); transition: transform 0.4s; }
+.jpv-refresh:active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+  transform: translateY(1px);
+}
 
 .jpv-body {
   flex: 1 1 auto;
@@ -384,6 +393,8 @@
   /* 跟一般 task row 不同的左邊框色（紫色 — 對應 PT 主題）*/
   box-shadow: inset 3px 0 0 rgba(201, 124, 244, 0.45) !important;
 }
+.jpv-pt-task-row.jpv-epic-row-tone-0 { background: rgba(255, 255, 255, 0.025); }
+.jpv-pt-task-row.jpv-epic-row-tone-1 { background: rgba(255, 255, 255, 0.065); }
 .jpv-pt-task-row::before { display: none !important; }   /* 拿掉一般 task row 的樹狀 connector */
 .jpv-pt-task-row::after { display: none !important; }
 .jpv-pt-assignee-avatar {
@@ -561,6 +572,8 @@
 
 /* ADS *-subtle 色票 — 對齊 Jira Epic 與 issue type 預設配色 */
 .jpv-task-bar.jpv-pt { background: #94C748; color: #292A2E; }      /* lime-subtle */
+.jpv-task-bar.jpv-pt.jpv-epic-tone-0 { background: #AFD77A; }
+.jpv-task-bar.jpv-pt.jpv-epic-tone-1 { background: #7FB33A; }
 .jpv-task-bar.jpv-eng { background: #579DFF; color: #292A2E; }     /* blue-subtle */
 .jpv-task-bar.jpv-art { background: #C97CF4; color: #292A2E; }     /* purple-subtle */
 .jpv-task-bar.jpv-anim { background: #E774BB; color: #292A2E; }    /* magenta-subtle */

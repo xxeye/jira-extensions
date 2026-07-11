@@ -8,6 +8,7 @@ const DEFAULTS = {
   msDiamond:         true,
   msShowProgress:    true,
   ptLockDrag:        true,
+  ptTargetEndShade:  false,
   epicStripe:        false,
   epicLockDrag:      true,
   hideCurrentMonth:  true,
@@ -27,6 +28,7 @@ const els = {
   diamond:          $('ms-diamond'),
   msShowProgress:   $('ms-show-progress'),
   ptLockDrag:       $('pt-lock-drag'),
+  ptTargetEndShade: $('pt-target-end-shade'),
   epicStripe:       $('epic-stripe'),
   epicLockDrag:     $('epic-lock-drag'),
   hideCurrentMonth: $('hide-current-month'),
@@ -58,6 +60,7 @@ const load = async () => {
   els.diamond.checked          = !!cfg.msDiamond;
   els.msShowProgress.checked   = !!cfg.msShowProgress;
   els.ptLockDrag.checked       = !!cfg.ptLockDrag;
+  els.ptTargetEndShade.checked = !!cfg.ptTargetEndShade;
   els.epicStripe.checked       = !!cfg.epicStripe;
   els.epicLockDrag.checked     = !!cfg.epicLockDrag;
   els.hideCurrentMonth.checked = !!cfg.hideCurrentMonth;
@@ -68,7 +71,7 @@ const load = async () => {
   els.focusMode.checked        = !!cfg.focusMode;
 };
 
-const save = async () => {
+const writeSettings = async () => {
   // 注意：enabled 不在這裡寫，由浮動 toolbar 管理（避免互相覆蓋）
   await chrome.storage.sync.set({
     ptColor:          els.pt.value,
@@ -76,6 +79,7 @@ const save = async () => {
     msDiamond:        els.diamond.checked,
     msShowProgress:   els.msShowProgress.checked,
     ptLockDrag:       els.ptLockDrag.checked,
+    ptTargetEndShade: els.ptTargetEndShade.checked,
     epicStripe:       els.epicStripe.checked,
     epicLockDrag:     els.epicLockDrag.checked,
     hideCurrentMonth: els.hideCurrentMonth.checked,
@@ -86,6 +90,14 @@ const save = async () => {
     focusMode:        els.focusMode.checked,
   });
   showStatus('已儲存');
+};
+
+// debounce 寫入 — 拖色盤時 input 事件連發，直寫會撞 storage.sync 的
+// MAX_WRITE_OPERATIONS_PER_MINUTE（120 次/分）配額，之後寫入靜默失敗
+let saveDebounceTimer = null;
+const save = () => {
+  clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(writeSettings, 250);
 };
 
 // color picker → hex 同步
@@ -102,20 +114,26 @@ els.msText.addEventListener('input', () => {
   if (isHex(v)) { els.ms.value = v; save(); }
 });
 
-els.diamond.addEventListener('change', save);
-els.msShowProgress.addEventListener('change', save);
-els.ptLockDrag.addEventListener('change', save);
-els.epicStripe.addEventListener('change', save);
-els.epicLockDrag.addEventListener('change', save);
-els.hideCurrentMonth.addEventListener('change', save);
-els.hideIssueKey.addEventListener('change', save);
-els.showWeekends.addEventListener('change', save);
-els.showHolidays.addEventListener('change', save);
-els.showWorkingDays.addEventListener('change', save);
-els.focusMode.addEventListener('change', save);
+// Checkboxes are low-frequency writes. Do not debounce them: closing the popup
+// destroys pending timers and would silently lose the final setting change.
+els.diamond.addEventListener('change', writeSettings);
+els.msShowProgress.addEventListener('change', writeSettings);
+els.ptLockDrag.addEventListener('change', writeSettings);
+els.ptTargetEndShade.addEventListener('change', writeSettings);
+els.epicStripe.addEventListener('change', writeSettings);
+els.epicLockDrag.addEventListener('change', writeSettings);
+els.hideCurrentMonth.addEventListener('change', writeSettings);
+els.hideIssueKey.addEventListener('change', writeSettings);
+els.showWeekends.addEventListener('change', writeSettings);
+els.showHolidays.addEventListener('change', writeSettings);
+els.showWorkingDays.addEventListener('change', writeSettings);
+els.focusMode.addEventListener('change', writeSettings);
 
 els.reset.addEventListener('click', async () => {
-  await chrome.storage.sync.set(DEFAULTS);
+  clearTimeout(saveDebounceTimer);   // 取消排隊中的舊值寫入，避免蓋掉 reset
+  // enabled 由浮動 toolbar 管理 — reset 不能把使用者剛停用的狀態悄悄改回啟用
+  const { enabled, ...rest } = DEFAULTS;
+  await chrome.storage.sync.set(rest);
   await load();
   showStatus('已重設');
 });

@@ -19,6 +19,8 @@ Jira Timeline 視覺強化插件 — 為 Planning Task / Milestone / Epic 加上
 
 可勾選「鎖定拖曳與拉長」防止誤動 PT 日期；鎖定狀態下從左欄任務名開啟側欄。
 
+可選擇依 Target end 將 PT 後段加深；僅在 Target end 落於 Start date～Due date 範圍內時顯示。
+
 ![PT 上色](screenshots/01-pt-color.png)
 > **截圖**：Timeline 上一段 PT bar 顯示自訂色（綠）。
 

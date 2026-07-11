@@ -26,6 +26,8 @@ const DEFAULT_CAP          = 5;
 const DEFAULT_SHOW_PT_LOAD = true; // 預設只開「PT 並行對比 bar」
 
 const $ = (id) => document.getElementById(id);
+const escapeHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const flashStatus = () => { const s = $('status'); s.classList.add('show'); setTimeout(() => s.classList.remove('show'), 1200); };
 
 const isPtType = (k) => /planning task/i.test(k);
@@ -100,31 +102,48 @@ const render = (selected, showPtLoad) => {
     cb.addEventListener('change', collectAndSave);
   });
 
-  $('show-pt-load').addEventListener('change', async (e) => {
-    await saveShowPtLoad(e.target.checked);
-  });
 };
 
 // ─── 部門名單區塊 ─────────────────────────────────
 // popup 跨 origin 呼叫 Atlassian gateway 會 403，所有 API 委託 content script 代跑
 let teamNameById = new Map();
 
-// 找一個開著的 Atlassian 分頁，發訊息給它的 content script
-const askContentScript = async (action, payload = {}) => {
-  const tabs = await new Promise(r => chrome.tabs.query({ url: 'https://*.atlassian.net/*' }, r));
-  if (!tabs.length) throw new Error('沒有開啟 Atlassian 分頁，請先打開 Jira 後再操作');
-  const tab = tabs[0];
-  return new Promise((resolve, reject) => {
-    chrome.tabs.sendMessage(tab.id, { action, ...payload }, (response) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error('content script 沒回應，請重整 Jira 分頁。' + chrome.runtime.lastError.message));
-      } else if (response?.error) {
-        reject(new Error(response.error));
-      } else {
-        resolve(response);
-      }
-    });
+// 找一個開著的 Atlassian 分頁，發訊息給它的 content script。
+// 不能死抓 tabs[0]：可能是被記憶體省電卸載（discarded）的分頁（content script 沒在跑），
+// 或非使用者當前操作的分頁。優先 active、跳過已卸載，沒回應就換下一個分頁重試。
+const sendToTab = (tabId, msg) => new Promise((resolve, reject) => {
+  chrome.tabs.sendMessage(tabId, msg, (response) => {
+    if (chrome.runtime.lastError) {
+      const err = new Error(chrome.runtime.lastError.message);
+      err.noReceiver = true;   // content script 不在（卸載/孤兒）→ 可換分頁重試
+      reject(err);
+    } else if (response?.error) {
+      reject(new Error(response.error));
+    } else {
+      resolve(response);
+    }
   });
+});
+
+const askContentScript = async (action, payload = {}) => {
+  const activeTabs = await new Promise(r => chrome.tabs.query({
+    active: true, currentWindow: true, url: 'https://*.atlassian.net/*',
+  }, r));
+  const tabs = await new Promise(r => chrome.tabs.query({ url: 'https://*.atlassian.net/*' }, r));
+  const activeIds = new Set(activeTabs.map(t => t.id));
+  const candidates = [...activeTabs, ...tabs.filter(t => !activeIds.has(t.id))]
+    .filter(t => !t.discarded && t.status !== 'unloaded');
+  if (!candidates.length) throw new Error('沒有開啟 Atlassian 分頁，請先打開 Jira 後再操作');
+  let lastErr = null;
+  for (const tab of candidates) {
+    try {
+      return await sendToTab(tab.id, { action, ...payload });
+    } catch (e) {
+      if (!e.noReceiver) throw e;   // content script 有回但回錯誤 → 是真錯誤，不換分頁
+      lastErr = e;
+    }
+  }
+  throw new Error('content script 沒回應，請重整 Jira 分頁。' + (lastErr ? lastErr.message : ''));
 };
 
 const renderRosterMap = () => {
@@ -132,7 +151,7 @@ const renderRosterMap = () => {
   if (!tbl) return;
   const rows = Object.entries(JpvTeams.ROLE_TO_TEAM_ID).map(([role, tid]) => {
     const teamName = tid ? (teamNameById.get(tid) || '(team id: ' + tid.slice(0, 8) + '...)') : '— 未對映 —';
-    return `<tr><td class="role-col">${role}</td><td class="arrow-col">→</td><td>${teamName}</td></tr>`;
+    return `<tr><td class="role-col">${role}</td><td class="arrow-col">→</td><td>${escapeHtml(teamName)}</td></tr>`;
   });
   tbl.innerHTML = rows.join('');
 };
@@ -269,11 +288,10 @@ const setupRoster = async () => {
     e.target.value = v;
     await saveCap(v);
   });
-
-  $('select-all').addEventListener('click', async () => {
-    await save(DEFAULT_TYPES);
-    render(DEFAULT_TYPES, showPtLoad);
+  $('show-pt-load').addEventListener('change', async (e) => {
+    await saveShowPtLoad(e.target.checked);
   });
+
   $('select-none').addEventListener('click', async () => {
     await save([]);
     render([], showPtLoad);

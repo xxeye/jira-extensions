@@ -23,6 +23,7 @@ Jira Timeline 視覺強化插件 — 為 Planning Task / Milestone / Epic 加上
 |------|------|------|------|
 | Planning Task | 顏色 | `#6a9a23` 綠 | PT bar 染色，色票或直接輸入 HEX 都可 |
 | Planning Task | 鎖定拖曳與拉長 | OFF | 防誤動 PT 日期；鎖定下從左欄任務名開啟側欄 |
+| Planning Task | Target end 後段加深 | OFF | Target end 位於 Start date～Due date 內時，將 Target end～Due date 區段同色加深 |
 | Milestone | 顏色 | `#FF8B00` 橘 | Milestone bar 染色 |
 | Milestone | 顯示為菱形 | OFF | bar 改為位於 due 日的菱形（時間點語意）|
 | Milestone | 顯示 relates to 完成度 | OFF | bar 上標示 `3/11 27%` 進度徽章 |
@@ -61,6 +62,8 @@ Jira Timeline 視覺強化插件 — 為 Planning Task / Milestone / Epic 加上
 PT 類型的 bar 染成自訂色，與 Engine/Math 等職種任務區隔。預設綠色 `#6a9a23`，可在 popup 自訂。
 
 popup「鎖定拖曳與拉長」勾選後，PT bar 上的拖曳與兩端拉伸都被禁用（防誤動）。鎖定狀態下點擊 bar 不會開側欄，從左欄任務名點開即可。
+
+popup 開啟「Target end 到截止日同色加深」後，插件才會額外抓取 Target end 欄位，並在日期有效時將 PT 後段加深。
 
 ![PT 上色](img/jpt-03-pt-color.png)
 

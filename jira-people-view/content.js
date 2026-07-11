@@ -2,6 +2,13 @@
 
 (() => {
   const STORAGE_KEY = 'jpv-types';
+
+  // 擴充功能 reload 後，舊 content script 變孤兒 — chrome.* 呼叫會拋
+  // "Extension context invalidated"。所有 chrome API 入口先過這個檢查。
+  const isAlive = () => {
+    try { return !!chrome.runtime?.id && !!chrome.storage?.sync; }
+    catch { return false; }
+  };
   const STORAGE_CAP = 'jpv-cap';
   const STORAGE_BTN_POS = 'jpv-button-pos';
   const STORAGE_SHOW_PT_LOAD = 'jpv-show-pt-load';
@@ -17,7 +24,8 @@
      document.querySelector('[data-testid="software-board.timeline"]') ||
      document.querySelector('[data-testid="roadmap.timeline-table.main.scrollable-overlay.today-marker.container"]'));
 
-  const getSettings = () => new Promise(resolve => {
+  const getSettings = () => new Promise((resolve, reject) => {
+    if (!isAlive()) { reject(new Error('擴充功能已重新載入，請重整此分頁')); return; }
     chrome.storage.sync.get([STORAGE_KEY, STORAGE_CAP, STORAGE_BTN_POS, STORAGE_SHOW_PT_LOAD], (data) => {
       resolve({
         types: Array.isArray(data[STORAGE_KEY]) ? data[STORAGE_KEY] : DEFAULT_TYPES,
@@ -67,7 +75,7 @@
 
   // popup → content script 訊息：popup 因 chrome-extension:// 跨 origin POST 會被
   // Atlassian gateway 擋（403），改由 content script 在 atlassian.net page 內代為呼叫
-  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  chrome.runtime?.onMessage?.addListener((msg, sender, sendResponse) => {
     if (msg && msg.action === 'jpv:refreshTeams') {
       JpvTeams.refreshAllRosters()
         .then(result => sendResponse(result))
@@ -94,7 +102,7 @@
 
   const savePos = (pos) => {
     cachedPos = pos;
-    chrome.storage.sync.set({ [STORAGE_BTN_POS]: pos });
+    if (isAlive()) chrome.storage.sync.set({ [STORAGE_BTN_POS]: pos });
   };
 
   const placeBtn = (btn, pos) => {
@@ -117,6 +125,7 @@
   };
 
   const loadCachedPos = () => new Promise(resolve => {
+    if (!isAlive()) { resolve(); return; }
     chrome.storage.sync.get([STORAGE_BTN_POS], (data) => {
       cachedPos = isValidPos(data[STORAGE_BTN_POS]) ? data[STORAGE_BTN_POS] : DEFAULT_POS;
       resolve();
@@ -128,24 +137,27 @@
     placeBtn(btn, cachedPos);
   };
 
-  const watchResize = (btn) => {
-    let raf = 0;
-    const handler = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        if (btn.classList.contains('dragging')) return;
-        placeBtn(btn, cachedPos);
-      });
-    };
-    window.addEventListener('resize', handler);
-    if (window.visualViewport) window.visualViewport.addEventListener('resize', handler);
+  // resize handler：module-level 註冊一次、動態查 btn —
+  // 不隨 injectButton/removeButton 重複掛（曾造成 SPA 往返累積殭屍 listener）
+  let resizeRaf = 0;
+  const onViewportResize = () => {
+    if (resizeRaf) return;
+    resizeRaf = requestAnimationFrame(() => {
+      resizeRaf = 0;
+      const btn = document.getElementById('jpv-launch');
+      if (!btn || btn.classList.contains('dragging')) return;
+      placeBtn(btn, cachedPos);
+    });
   };
+  window.addEventListener('resize', onViewportResize);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
 
-  chrome.storage.onChanged.addListener((changes, area) => {
+  chrome.storage?.onChanged?.addListener((changes, area) => {
     if (area === 'sync' && changes[STORAGE_BTN_POS]) {
       const v = changes[STORAGE_BTN_POS].newValue;
       cachedPos = isValidPos(v) ? v : DEFAULT_POS;
+      const btn = document.getElementById('jpv-launch');
+      if (btn && !btn.classList.contains('dragging')) placeBtn(btn, cachedPos);
     }
   });
 
@@ -178,6 +190,7 @@
       let moved = false;
 
       const onMove = (em) => {
+        if (em.buttons === 0) { onUp(); return; }
         const dx = em.clientX - startX;
         const dy = em.clientY - startY;
         if (!moved && Math.hypot(dx, dy) < 4) return;
@@ -191,6 +204,7 @@
       const onUp = () => {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        window.removeEventListener('blur', onUp);
         btn.classList.remove('dragging');
         if (moved) {
           dragJustEnded = true;
@@ -204,6 +218,7 @@
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
+      window.addEventListener('blur', onUp);
       e.preventDefault();
       e.stopPropagation();
     });
@@ -232,7 +247,6 @@
     document.body.appendChild(btn);
     applyPos(btn);
     makeInteractive(btn);
-    watchResize(btn);
   };
 
   const removeButton = () => {
@@ -241,6 +255,7 @@
   };
 
   const sync = () => {
+    if (!isAlive()) { removeButton(); return; }
     if (isTimelinePage()) injectButton();
     else removeButton();
   };

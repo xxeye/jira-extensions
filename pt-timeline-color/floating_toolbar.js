@@ -4,6 +4,13 @@
 (() => {
   const STORAGE_POS = 'jpt-toolbar-pos';
 
+  // 擴充功能 reload 後，舊 content script 變孤兒 — chrome.* 呼叫會拋
+  // "Extension context invalidated"。所有 chrome API 入口先過這個檢查。
+  const isAlive = () => {
+    try { return !!chrome.runtime?.id && !!chrome.storage?.sync && !!chrome.storage?.local; }
+    catch { return false; }
+  };
+
   const isTimelinePage = () =>
     location.pathname.includes('/boards') &&
     (location.pathname.includes('timeline') ||
@@ -11,19 +18,24 @@
      location.hash.includes('timeline') ||
      document.querySelector('[data-testid="software-board.timeline"]') ||
      document.querySelector('[data-testid="roadmap.timeline-table.main.scrollable-overlay.today-marker.container"]'));
+  // 供 timeline_color.js 共用同一份判定（manifest 順序：本檔先載入）。
+  // 兩處判定曾各寫各的，邊界情況會 toolbar 有出現但染色沒啟用。
+  window.__jptIsTimelinePage = isTimelinePage;
 
   const getEnabled = () => new Promise(r => {
+    if (!isAlive()) { r(true); return; }
     chrome.storage.sync.get({ enabled: true }, (d) => r(d.enabled !== false));
   });
-  const setEnabled = (v) => chrome.storage.sync.set({ enabled: !!v });
-  const triggerRefresh = () => chrome.storage.local.set({ cacheBuster: Date.now() });
+  const setEnabled = (v) => { if (isAlive()) chrome.storage.sync.set({ enabled: !!v }); };
+  const triggerRefresh = () => { if (isAlive()) chrome.storage.local.set({ cacheBuster: Date.now() }); };
 
   // ─── Edge-snap 定位模型（吸上邊或右邊，沿邊自由）───
   // 儲存：{ side: 'right'|'top', ratio: 0..1 }
   //   side='right' → 貼右邊，ratio = 垂直位置 (top / maxTop)
   //   side='top'   → 貼上邊，ratio = 水平位置 (left / maxLeft)
   const EDGE_MARGIN = 8;
-  const DEFAULT_POS = { side: 'right', ratio: 0.85 };
+  // ratio 0.92：比 jira-people-view 浮動鈕預設（0.78）更靠下，兩插件同開時不重疊
+  const DEFAULT_POS = { side: 'right', ratio: 0.92 };
 
   // Cache 住目前 pos，避免 resize handler 每次 await storage（曾導致 race 漏 update）
   let cachedPos = DEFAULT_POS;
@@ -32,7 +44,7 @@
 
   const savePos = (pos) => {
     cachedPos = pos;
-    chrome.storage.sync.set({ [STORAGE_POS]: pos });
+    if (isAlive()) chrome.storage.sync.set({ [STORAGE_POS]: pos });
   };
 
   const placeBar = (bar, pos) => {
@@ -55,6 +67,7 @@
   };
 
   const loadCachedPos = () => new Promise(resolve => {
+    if (!isAlive()) { resolve(); return; }
     chrome.storage.sync.get([STORAGE_POS], (data) => {
       cachedPos = isValidPos(data[STORAGE_POS]) ? data[STORAGE_POS] : DEFAULT_POS;
       resolve();
@@ -66,27 +79,34 @@
     placeBar(bar, cachedPos);
   };
 
-  // resize handler：純同步，從 cache 讀，避免 await storage 的 race 漏 update
-  const watchResize = (bar) => {
-    let raf = 0;
-    const handler = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        if (bar.classList.contains('dragging')) return;
-        placeBar(bar, cachedPos);
-      });
-    };
-    window.addEventListener('resize', handler);
-    // 同時監聽 visualViewport（pinch zoom / DevTools 開合都會觸發）
-    if (window.visualViewport) window.visualViewport.addEventListener('resize', handler);
+  // resize handler：純同步，從 cache 讀，避免 await storage 的 race 漏 update。
+  // module-level 註冊一次、動態查 bar — 不隨 inject/remove 重複掛（曾造成 listener 累積）。
+  let resizeRaf = 0;
+  const onViewportResize = () => {
+    if (resizeRaf) return;
+    resizeRaf = requestAnimationFrame(() => {
+      resizeRaf = 0;
+      const bar = document.getElementById('jpt-toolbar');
+      if (!bar || bar.classList.contains('dragging')) return;
+      placeBar(bar, cachedPos);
+    });
   };
+  window.addEventListener('resize', onViewportResize);
+  // 同時監聽 visualViewport（pinch zoom / DevTools 開合都會觸發）
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
 
-  // 從別處（popup / 別分頁）改 storage 時同步 cache
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'sync' && changes[STORAGE_POS]) {
+  // 從別處（popup / 別分頁）改 storage 時同步 cache 與 UI（同樣只註冊一次）
+  chrome.storage?.onChanged?.addListener((changes, area) => {
+    if (area !== 'sync') return;
+    const bar = document.getElementById('jpt-toolbar');
+    if (changes[STORAGE_POS]) {
       const v = changes[STORAGE_POS].newValue;
       cachedPos = isValidPos(v) ? v : DEFAULT_POS;
+      if (bar && !bar.classList.contains('dragging')) placeBar(bar, cachedPos);
+    }
+    // popup / 別分頁也能改 enabled，這邊要跟上
+    if (changes.enabled && bar) {
+      reflectEnabled(bar, changes.enabled.newValue !== false);
     }
   });
 
@@ -135,6 +155,9 @@
       let moved = false;
 
       const onMove = (em) => {
+        // 滑鼠在視窗外/iframe 上放開時 document 收不到 mouseup —
+        // buttons === 0 表示按鍵其實已放開，補結束拖曳（否則卡在 dragging）
+        if (em.buttons === 0) { onUp(); return; }
         const dx = em.clientX - startX, dy = em.clientY - startY;
         if (!moved && Math.hypot(dx, dy) < 4) return;
         moved = true;
@@ -147,6 +170,7 @@
       const onUp = () => {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        window.removeEventListener('blur', onUp);
         bar.classList.remove('dragging');
         if (moved) {
           dragJustEnded = true;
@@ -160,6 +184,7 @@
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
+      window.addEventListener('blur', onUp);   // 拖到視窗外放開的兜底
       e.preventDefault();
       e.stopPropagation();
     });
@@ -176,8 +201,10 @@
       const action = seg.dataset.jptAction;
       if (action === 'toggle') {
         const next = !bar.classList.contains('jpt-tb-on');
-        await setEnabled(next);
+        // 先樂觀更新 UI 再寫 storage — 若等 await 回來才更新 class，
+        // 快速連點時第二下會讀到舊 class 算錯 next（連點兩下停在停用）
         reflectEnabled(bar, next);
+        await setEnabled(next);
       } else if (action === 'refresh') {
         if (!bar.classList.contains('jpt-tb-on')) {
           flashStatus(bar, '插件已停用，請先啟用', 'warn');
@@ -210,14 +237,6 @@
     reflectEnabled(bar, await getEnabled());
     await applyPos(bar);
     makeInteractive(bar);
-    watchResize(bar);
-
-    // 同步：popup 也能改 enabled，這邊要跟上
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === 'sync' && changes.enabled) {
-        reflectEnabled(bar, changes.enabled.newValue !== false);
-      }
-    });
   };
 
   const remove = () => {
@@ -226,6 +245,7 @@
   };
 
   const sync = () => {
+    if (!isAlive()) { remove(); return; }   // 孤兒 script：清掉殘留 UI，不再碰 chrome API
     if (isTimelinePage()) inject();
     else remove();
   };

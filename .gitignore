@@ -7,6 +7,7 @@ template-expander/
 
 # AI 入口（本地開發用，不上 git）
 CLAUDE.md
+AGENTS.md
 
 # 本地打包產物（zip 走 GitHub Releases，不上 repo）
 *.zip

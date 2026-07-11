@@ -106,7 +106,8 @@ const JpvTeams = (() => {
         console.warn('[jpv teams] bulk fetch failed', e);
       }
     }
-    // fallback：bulk 失敗的人逐個用 /user?accountId= 補
+    // fallback：bulk 失敗的人逐個用 /user?accountId= 補（加節流 — bulk 整批掛掉時
+    // 大 team 會逐人發數十個請求，不節流會對共享配額造成突發衝擊）
     for (const m of result) {
       if (m.name) continue;
       try {
@@ -117,6 +118,7 @@ const JpvTeams = (() => {
           m.avatar = u.avatarUrls?.['24x24'] || '';
         }
       } catch {}
+      await JiraApi.sleep(100);
     }
     return result;
   };
@@ -201,9 +203,11 @@ const JpvTeams = (() => {
     // Step 1: 收集舊名單（cache）
     const oldMembers = new Map();      // accountId → name
     const oldTeamsByAid = new Map();   // accountId → Set<teamId>
+    const oldMembersByTeam = new Map();
     for (const tid of teamIds) {
       const cached = await readCache(tid);
       if (cached) {
+        oldMembersByTeam.set(tid, cached.members);
         for (const m of cached.members) {
           if (EXCLUDED_ACCOUNT_IDS.has(m.accountId)) continue;
           if (!oldMembers.has(m.accountId)) oldMembers.set(m.accountId, m.name || m.accountId);
@@ -231,6 +235,14 @@ const JpvTeams = (() => {
       } catch (e) {
         console.warn('[jpv teams] refresh failed for', tid, e);
         failures.push({ teamId: tid, error: e.message });
+        // A failed team has unknown current state. Preserve its cached members so
+        // a partial outage cannot report the whole team as removed.
+        for (const m of (oldMembersByTeam.get(tid) || [])) {
+          if (EXCLUDED_ACCOUNT_IDS.has(m.accountId)) continue;
+          if (!newMembers.has(m.accountId)) newMembers.set(m.accountId, m.name || m.accountId);
+          if (!newTeamsByAid.has(m.accountId)) newTeamsByAid.set(m.accountId, new Set());
+          newTeamsByAid.get(m.accountId).add(tid);
+        }
       }
     }
 

@@ -3,6 +3,7 @@
 const JpvData = (() => {
   const FIELD_START = 'customfield_10015'; // Jira Cloud Start Date
   const FIELD_ROLE  = 'customfield_10773'; // 對應職種（多選 — plan/art/data/...）
+  const CROSS_ROLE_LABEL = '\u8de8\u8077\u7a2e\u7bc0\u9ede';
 
   // 任務類型 → cf[10773] 對應職種值（給「主視圖 + 顯示相關 PT 負載」模式用）
   const TYPE_TO_ROLE = {
@@ -157,12 +158,11 @@ const JpvData = (() => {
 
   const isPlanningTask = (iss) => /planning task/i.test(iss.typeName);
 
-  // PT 專用：以「對應職種 → 受託人 → 任務」三層分組
-  // 一個 PT 可掛多個職種，會在每個有 match 的職種下出現一次
-  // 自動依 issues 中存在的非 PT 任務類型，推算出「相關職種」白名單
-  // - 若 issues 完全沒有非 PT 任務（PT-only 模式）→ 不過濾，全部 role 都顯示
-  // - 若有非 PT 任務（主視圖 + showPtLoad 模式）→ 只顯示對應職種的 role group
-  // 回傳 [{role, issues, dailyMap, maxDaily, assignees: [...]}]
+  // PT 專用：以「職種 → 受託人 → 任務」三層分組，每個 PT 只進一組
+  //   單職種→該職種組；多職種→「跨職種節點」；無職種→「未分類」
+  // allowedRoles 過濾：B 視角(純 PT)不過濾全顯示；showPtLoad 時只留對應職種
+  //   ⚠️ 但 A 視角目前走 renderPtSummary 不畫 role group，故此過濾暫無畫面效果(預留)
+  // 回傳 [{role, issues, dailyMap, maxDaily, assignees}]
   const groupByRoleAssignee = (issues) => {
     const pts = issues.filter(isPlanningTask);
     // 推算 allowedRoles：對應 issues 中存在的非 PT 任務類型
@@ -176,9 +176,14 @@ const JpvData = (() => {
 
     const roleMap = new Map();
     for (const iss of pts) {
-      const tags = iss.roles && iss.roles.length ? iss.roles : ['未分類'];
+      const baseTags = iss.roles && iss.roles.length
+        ? [...new Set(iss.roles)]
+        : ['\u672a\u5206\u985e'];
+      const tags = baseTags.length > 1
+        ? [CROSS_ROLE_LABEL]
+        : baseTags;
       for (const role of tags) {
-        if (useFilter && !allowedRoles.has(role)) continue;
+        if (useFilter && role !== CROSS_ROLE_LABEL && !allowedRoles.has(role)) continue;
         if (!roleMap.has(role)) {
           roleMap.set(role, { role, issues: [], assigneeMap: new Map() });
         }
@@ -197,7 +202,7 @@ const JpvData = (() => {
     }
     const out = [];
     for (const grp of roleMap.values()) {
-      grp.issues = sortByDue(grp.issues);
+      grp.issues = sortByEpicDue(grp.issues);
       grp.dailyMap = dailyIssues(grp.issues);
       grp.maxDaily = 0;
       for (const list of grp.dailyMap.values()) {
@@ -219,6 +224,8 @@ const JpvData = (() => {
       out.push(grp);
     }
     return out.sort((a, b) => {
+      if (a.role === CROSS_ROLE_LABEL) return 1;
+      if (b.role === CROSS_ROLE_LABEL) return -1;
       if (a.maxDaily !== b.maxDaily) return b.maxDaily - a.maxDaily;
       return a.role.localeCompare(b.role);
     });
@@ -236,11 +243,22 @@ const JpvData = (() => {
   };
 
   // 任務依 due asc 排（沒填 due 的丟最後）
-  const sortByDue = (issues) => issues.slice().sort((a, b) => {
+  const compareDue = (a, b) => {
     if (!a.due && !b.due) return 0;
     if (!a.due) return 1;
     if (!b.due) return -1;
     return a.due.localeCompare(b.due);
+  };
+  const sortByDue = (issues) => issues.slice().sort(compareDue);
+  const sortByEpicDue = (issues) => issues.slice().sort((a, b) => {
+    const epicA = a.parentKey || '';
+    const epicB = b.parentKey || '';
+    if (epicA && !epicB) return -1;
+    if (!epicA && epicB) return 1;
+    const epicOrder = epicA.localeCompare(epicB, undefined, { numeric: true, sensitivity: 'base' });
+    if (epicOrder !== 0) return epicOrder;
+    const dueOrder = compareDue(a, b);
+    return dueOrder !== 0 ? dueOrder : (a.key || '').localeCompare(b.key || '', undefined, { numeric: true });
   });
 
   // 依 assignee 分組；同時計算 maxDaily + dailyMap 緩存，並依工作量排序（最忙在上）
@@ -276,11 +294,20 @@ const JpvData = (() => {
   // 回傳 Map<dateStr, [{key, summary, typeName, parentKey, parentSummary, hasRelates}]>
   const dailyIssues = (issues) => {
     const map = new Map();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const minDate = new Date(today);
+    const maxDate = new Date(today);
+    minDate.setDate(minDate.getDate() - 730);
+    maxDate.setDate(maxDate.getDate() + 730);
     for (const iss of issues) {
       if (!iss.start || !iss.due) continue;
-      const start = new Date(iss.start + 'T00:00:00');
-      const end = new Date(iss.due + 'T00:00:00');
-      if (isNaN(start) || isNaN(end) || end < start) continue;
+      const rawStart = new Date(iss.start + 'T00:00:00');
+      const rawEnd = new Date(iss.due + 'T00:00:00');
+      if (isNaN(rawStart) || isNaN(rawEnd) || rawEnd < rawStart) continue;
+      if (rawEnd < minDate || rawStart > maxDate) continue;
+      const start = rawStart < minDate ? minDate : rawStart;
+      const end = rawEnd > maxDate ? maxDate : rawEnd;
       const cur = new Date(start);
       while (cur <= end) {
         const k = isoDate(cur);

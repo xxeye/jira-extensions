@@ -34,7 +34,7 @@
 
 ### 任務類型篩選
 
-點工具列插件圖示開啟 popup，可勾選要納入計算的任務類型（10 種：Planning Task / Plan Story / Art Story / Anim Task / Engine Task / Backend Task / Math Task / Data Task / QA Task / Dev Task）。預設全選。
+點工具列插件圖示開啟 popup，可勾選要納入計算的任務類型（10 種：Planning Task / Plan Story / Art Story / Anim Task / Engine Task / Backend Task / Math Task / Data Task / QA Task / Dev Task）。
 
 ![Popup 設定面板](screenshots/03-popup.png)
 > **截圖**：popup 設定面板的全貌。

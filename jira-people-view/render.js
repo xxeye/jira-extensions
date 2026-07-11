@@ -5,6 +5,8 @@ const JpvRender = (() => {
   const MIN_DAYS_BEFORE = 90;       // 今天往前最少 ~3 個月（資料更早會自動延伸）
   const MIN_DAYS_AFTER = 270;       // 今天往後最少 ~9 個月（資料更晚會自動延伸）
   const RANGE_BUFFER = 14;          // 資料延伸時兩端各加 14 天緩衝
+  const MAX_DAYS_BEFORE = 730;      // 防止異常日期產生過大的 DOM
+  const MAX_DAYS_AFTER = 730;
   const ROW_H = 36;
   const cellIssuesMap = new WeakMap();   // cell DOM → 該段任務清單 + 日期範圍
   let tooltipEl = null;
@@ -69,7 +71,7 @@ const JpvRender = (() => {
       <div class="jpv-window">
         <div class="jpv-header">
           <span class="jpv-title">人力視圖</span>
-          <span class="jpv-meta">${people.length} 人 · ${rangeStart.toISOString().slice(0,10)} ~ ${rangeEnd.toISOString().slice(0,10)}</span>
+          <span class="jpv-meta">${people.length} 人 · ${JpvData.isoDate(rangeStart)} ~ ${JpvData.isoDate(rangeEnd)}</span>
           <span class="jpv-spacer"></span>
           <button class="jpv-refresh" title="重新抓任務（從 Jira 取最新資料）">↻</button>
           <button class="jpv-close" title="關閉">✕</button>
@@ -176,17 +178,23 @@ const JpvRender = (() => {
   };
 
   // ─── 任務 bar track ────────────────────────
-  const buildTaskTrack = (iss, rangeStart) => {
+  const buildTaskTrack = (iss, rangeStart, rangeEnd, epicTone = null) => {
     const track = document.createElement('div');
     track.className = 'jpv-track jpv-track-task';
     if (!iss.start || !iss.due) return track;
     const start = new Date(iss.start + 'T00:00:00');
     const end = new Date(iss.due + 'T00:00:00');
     if (isNaN(start) || isNaN(end) || end < start) return track;
-    const left = dayDiff(rangeStart, start) * PX_PER_DAY;
-    const width = (dayDiff(start, end) + 1) * PX_PER_DAY;
+    if (end < rangeStart || start > rangeEnd) return track;
+    const visibleStart = start < rangeStart ? rangeStart : start;
+    const visibleEnd = end > rangeEnd ? rangeEnd : end;
+    const left = dayDiff(rangeStart, visibleStart) * PX_PER_DAY;
+    const width = (dayDiff(visibleStart, visibleEnd) + 1) * PX_PER_DAY;
     const bar = document.createElement('div');
     bar.className = `jpv-task-bar ${typeClass(iss.typeName)}`;
+    if (Number.isInteger(epicTone) && /planning task/i.test(iss.typeName)) {
+      bar.classList.add(`jpv-epic-tone-${epicTone}`);
+    }
     bar.style.left = left + 'px';
     bar.style.width = width + 'px';
     bar.title = `${iss.key} ${iss.summary}\n${iss.start} ~ ${iss.due}\n${iss.typeName} · ${iss.statusName}`
@@ -204,16 +212,24 @@ const JpvRender = (() => {
   const computeRange = (issues) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const minRangeStart = addDays(today, -MAX_DAYS_BEFORE);
+    const maxRangeEnd = addDays(today, MAX_DAYS_AFTER);
     let rangeStart = addDays(today, -MIN_DAYS_BEFORE);
     let rangeEnd = addDays(today, MIN_DAYS_AFTER);
     for (const iss of issues) {
       if (iss.start) {
         const s = new Date(iss.start + 'T00:00:00');
-        if (!isNaN(s) && s < rangeStart) rangeStart = addDays(s, -RANGE_BUFFER);
+        if (!isNaN(s) && s < rangeStart) {
+          const candidate = addDays(s, -RANGE_BUFFER);
+          rangeStart = candidate < minRangeStart ? minRangeStart : candidate;
+        }
       }
       if (iss.due) {
         const d = new Date(iss.due + 'T00:00:00');
-        if (!isNaN(d) && d > rangeEnd) rangeEnd = addDays(d, RANGE_BUFFER);
+        if (!isNaN(d) && d > rangeEnd) {
+          const candidate = addDays(d, RANGE_BUFFER);
+          rangeEnd = candidate > maxRangeEnd ? maxRangeEnd : candidate;
+        }
       }
     }
     return { today, rangeStart, rangeEnd };
@@ -559,10 +575,18 @@ const JpvRender = (() => {
     // ── L2：個別任務 row（展開後一個 PT 一行）—— PT 專用樣式，前面加受託人頭像 ──
     const taskLeftEls = [];
     const taskRightEls = [];
+    let lastEpicKey = null;
+    let rowEpicTone = 1;
     group.issues.forEach((iss, i) => {
+      const epicKey = iss.parentKey || '__no_epic__';
+      if (epicKey !== lastEpicKey) {
+        rowEpicTone = rowEpicTone === 0 ? 1 : 0;
+        lastEpicKey = epicKey;
+      }
       const isLast = i === group.issues.length - 1;
       const lr = document.createElement('div');
       lr.className = `jpv-task-row jpv-pt-task-row` + (isLast ? ' is-last' : '');
+      lr.classList.add(`jpv-epic-row-tone-${rowEpicTone}`);
       lr.dataset.section = 'pt';
       lr.dataset.roleKey = roleKey;
       lr.style.display = 'none';
@@ -583,8 +607,9 @@ const JpvRender = (() => {
       leftRows.appendChild(lr);
       taskLeftEls.push(lr);
 
-      const rt = buildTaskTrack(iss, rangeStart);
+      const rt = buildTaskTrack(iss, rangeStart, rangeEnd, rowEpicTone);
       rt.classList.add('jpv-pt-task-row');
+      rt.classList.add(`jpv-epic-row-tone-${rowEpicTone}`);
       rt.dataset.section = 'pt';
       rt.dataset.roleKey = roleKey;
       rt.style.display = 'none';
@@ -798,7 +823,7 @@ const JpvRender = (() => {
       leftRows.appendChild(lr);
       childLeft.push(lr);
 
-      const rt = buildTaskTrack(iss, rangeStart);
+      const rt = buildTaskTrack(iss, rangeStart, rangeEnd);
       rt.classList.add(zebra);
       rt.dataset.section = sectionKey;
       rt.style.display = 'none';
