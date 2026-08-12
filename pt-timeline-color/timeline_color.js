@@ -481,26 +481,30 @@
 
   const renderProgressBadge = (bar, progress, dueDate) => {
     const existing = bar.querySelector(`:scope > .${PROGRESS_CLASS}`);
-    // 防呆：缺資料 / 設定關閉 / 數值異常 → 清掉 badge
-    const valid = progress
+    const dueText = formatDueMonthDay(dueDate);
+    // 完成度與 Due date 各自可顯示；兩者都沒有或設定關閉才清掉 badge。
+    const hasProgress = progress
       && Number.isFinite(progress.pct)
       && Number.isFinite(progress.total)
       && progress.total > 0
       && Number.isFinite(progress.done)
       && Number.isFinite(progress.wip);
-    if (!valid || !settings.msShowProgress) {
+    if ((!hasProgress && !dueText) || !settings.msShowProgress) {
       existing?.remove();
       return;
     }
     // 分子 = 已開始的任務數（done + wip）；% 數仍以「進行中算半分」計算
-    const startedCount = progress.done + progress.wip;
-    const dueText = formatDueMonthDay(dueDate);
-    const text = `${startedCount}/${progress.total} ${progress.pct}%${dueText ? ` · DUE ${dueText}` : ''}`;
-    const progressTitle = progress.wip > 0
-      ? `${progress.done} 完成 + ${progress.wip} 進行中（半分） / ${progress.total} 總共 = ${progress.pct}%`
-      : `${progress.done} 完成 / ${progress.total} 總共 = ${progress.pct}%`;
-    const title = `${progressTitle}${dueText ? `；Due date：${dueDate}` : ''}`;
-    const tier = progressColorTier(progress.pct);
+    const progressText = hasProgress
+      ? `${progress.done + progress.wip}/${progress.total} ${progress.pct}%`
+      : '';
+    const text = [progressText, dueText ? `DUE ${dueText}` : ''].filter(Boolean).join(' · ');
+    const progressTitle = !hasProgress
+      ? ''
+      : progress.wip > 0
+        ? `${progress.done} 完成 + ${progress.wip} 進行中（半分） / ${progress.total} 總共 = ${progress.pct}%`
+        : `${progress.done} 完成 / ${progress.total} 總共 = ${progress.pct}%`;
+    const title = [progressTitle, dueText ? `Due date：${dueDate}` : ''].filter(Boolean).join('；');
+    const tier = hasProgress ? progressColorTier(progress.pct) : 'jpt-ms-progress-zero';
     // 冪等：內容/色階一致就不動 DOM（避免 MutationObserver 雪球）
     if (existing && existing.textContent === text && existing.classList.contains(tier) && existing.title === title) {
       return;
@@ -512,7 +516,6 @@
     span.title = title;
     bar.appendChild(span);
   };
-
   // ─── 套色到單一 bar ──────────────────────────────────
   // 冪等實作：先算出目標 class set，再跟 bar 現有 class 比對，差異才動 DOM。
   // 之前無條件 remove(...ALL_CLASSES) + add 會在新一輪掃描期間短暫露出 Jira
