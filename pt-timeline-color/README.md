@@ -31,7 +31,7 @@ Jira Timeline 視覺強化插件 — 為 Planning Task / Milestone / Epic 加上
 - **自訂顏色**
 - **菱形顯示** — bar 改為位於 due 日的菱形，自動鎖定時間條前後拉長，僅保留時間塊拖動功能。
 - **鎖定前後拉長** — 只能整塊拖動，避免拉成區間
-- **relates-to 進度** — 自動依 issue link `relates to` 計算並標示 `3/11 27%`
+- **relates-to 進度** — 自動依 issue link `relates to` 計算並標示 `3/11 27% · DUE 8/30`
 
 ![Milestone 菱形與進度](screenshots/02-milestone-diamond-progress.png)
 > **截圖**：菱形 Milestone 上標示 `X/Y NN%`，挑一個有 3~10 筆 relates-to 的最有畫面。

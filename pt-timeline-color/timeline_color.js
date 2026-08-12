@@ -474,7 +474,12 @@
     return 'jpt-ms-progress-zero';
   };
 
-  const renderProgressBadge = (bar, progress) => {
+  const formatDueMonthDay = (iso) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+    return m ? `${Number(m[2])}/${Number(m[3])}` : '';
+  };
+
+  const renderProgressBadge = (bar, progress, dueDate) => {
     const existing = bar.querySelector(`:scope > .${PROGRESS_CLASS}`);
     // 防呆：缺資料 / 設定關閉 / 數值異常 → 清掉 badge
     const valid = progress
@@ -489,10 +494,12 @@
     }
     // 分子 = 已開始的任務數（done + wip）；% 數仍以「進行中算半分」計算
     const startedCount = progress.done + progress.wip;
-    const text = `${startedCount}/${progress.total} ${progress.pct}%`;
-    const title = progress.wip > 0
+    const dueText = formatDueMonthDay(dueDate);
+    const text = `${startedCount}/${progress.total} ${progress.pct}%${dueText ? ` · DUE ${dueText}` : ''}`;
+    const progressTitle = progress.wip > 0
       ? `${progress.done} 完成 + ${progress.wip} 進行中（半分） / ${progress.total} 總共 = ${progress.pct}%`
       : `${progress.done} 完成 / ${progress.total} 總共 = ${progress.pct}%`;
+    const title = `${progressTitle}${dueText ? `；Due date：${dueDate}` : ''}`;
     const tier = progressColorTier(progress.pct);
     // 冪等：內容/色階一致就不動 DOM（避免 MutationObserver 雪球）
     if (existing && existing.textContent === text && existing.classList.contains(tier) && existing.title === title) {
@@ -563,7 +570,7 @@
 
     // Milestone 才顯示 badge；其他類型清掉（renderProgressBadge 自身冪等）
     renderPtTargetEndShade(bar, wantPT ? data : null);
-    renderProgressBadge(bar, isMs ? data.progress : null);
+    renderProgressBadge(bar, isMs ? data.progress : null, isMs ? data.dueDate : null);
   };
 
   // ─── 全頁重渲染（settings 變動時呼叫）──────────────
