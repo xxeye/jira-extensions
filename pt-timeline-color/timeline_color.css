@@ -167,15 +167,22 @@ body.jpt-active .dependencies-overlay path[data-testid$=".line.interactive-path"
 }
 
 /* 隱藏 Jira Timeline 當月份高亮欄（保留今天藍線 today-marker）
- * Jira UI 用 ._1kl7ia51._1s7zia51 標記目前月份的 column overlay。
- * 這對 Atlassian compiled-css 哈希在版本更新時可能變動，必要時須更新選擇器。
+ * 2026-08 改版前：Jira 用 ._1kl7ia51._1s7zia51 這組雜湊 class 標記目前月份的
+ * column overlay，寫死在 CSS 裡。
+ * 2026-08 改版後：雜湊 class 已經失效，且哪一欄是「目前時段」是動態的，沒辦法
+ * 再用靜態選擇器表達。改成 timeline_color.js 的 applyCurrentPeriodHide() 動態
+ * 找到目前高亮的欄位（[data-testid^="timeline.chart-overlays.columns-overlay.
+ * column-"] 裡背景不透明的那個），直接在該元素上加這個 class。
  */
-body.jpt-hide-current-month ._1kl7ia51._1s7zia51 {
-  display: none !important;
+.jpt-current-period-hidden {
+  background: transparent !important;
 }
 
-/* 隱藏左欄 issue key（如 ABC-1234）— 不影響任務名 / Epic 圖示 */
-body.jpt-hide-issue-key [data-testid="roadmap.timeline-table-kit.ui.list-item-content.summary.key"] {
+/* 隱藏左欄 issue key（如 ABC-1234）— 不影響任務名 / Epic 圖示
+ * 2026-08 改版：testid 從 roadmap.timeline-table-kit.ui.list-item-content.
+ * summary.key 換成 native-issue-table.common.ui.issue-cells.issue-key.issue-key-cell
+ */
+body.jpt-hide-issue-key [data-testid="native-issue-table.common.ui.issue-cells.issue-key.issue-key-cell"] {
   display: none !important;
 }
 
@@ -188,6 +195,16 @@ body.jpt-hide-issue-key [data-testid="roadmap.timeline-table-kit.ui.list-item-co
   bottom: 0;
   pointer-events: none;
   z-index: 0;
+  /* 實測：這幾個 strip 是插進 Jira 自己的 chart-overlays.container 裡
+   * （為了複用 today-marker 的座標系），而這個容器本身在 Jira 的 DOM 樹裡
+   * z-index:3，天生就疊在整張 table（bar/文字都在裡面，z-index:auto）上面。
+   * 不能把 strip 搬進 table 內部自己排隊——那是 Jira 用 React 管理的即時
+   * DOM，插進去容易撞 reconciler（參考 MAINTENANCE.md 工作天數 overlay
+   * 那段的教訓）。用 multiply 混合模式讓底色用「乘」的方式跟下面的 bar/
+   * 文字疊色，而不是單純疊在最上層蓋住細節，視覺上才不會覺得 strip 把
+   * bar 蓋住/弄髒。
+   */
+  mix-blend-mode: multiply;
 }
 .jpt-cal-strip.jpt-cal-weekend {
   background-color: rgba(200, 200, 200, 0.05);
@@ -195,8 +212,6 @@ body.jpt-hide-issue-key [data-testid="roadmap.timeline-table-kit.ui.list-item-co
 .jpt-cal-strip.jpt-cal-holiday {
   background-color: rgba(255, 140, 80, 0.10);
 }
-
-/* 專注模式：透過操作 Jira 內建 Epic 快速篩選達成（不需 CSS 隱藏） */
 
 /* ─── 浮動 Toolbar（啟用 toggle + 重新整理）─────────────────
    樣式對齊 jira-people-view 浮動鈕 + Jira ADS 設計 token */

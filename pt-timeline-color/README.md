@@ -66,15 +66,6 @@ Jira Timeline 視覺強化插件 — 為 Planning Task / Milestone / Epic 加上
 
 ---
 
-### 專注模式
-
-展開任一 Epic 時自動開啟快速篩選。讓畫面只剩該 Epic 與其子任務；收合或關閉時還原。
-
-![專注模式展開前後](screenshots/07-focus-mode.png)
-> **截圖**：兩張對比 — 展開 Epic 前（滿頁雜任務）vs 展開後（只剩該 Epic + 子任務）。
-
----
-
 ## 設定面板
 
 ![Popup 設定面板](screenshots/00-popup-overview.png)

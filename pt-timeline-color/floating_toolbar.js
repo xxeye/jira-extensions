@@ -11,13 +11,19 @@
     catch { return false; }
   };
 
+  // 2026-08 改版：today-marker 的 testid 消失了（見 timeline_color.js 的
+  // findTodayMarker），這裡的 DOM fallback 改成抓新版還在的 testid
+  // （aais-timeline-toolbar 週/月/季切換鈕、native-issue-table 的 issue key 欄）。
+  // 主要判斷還是靠 URL pathname/search/hash 有沒有 "timeline"，DOM fallback
+  // 只在極少數 URL 沒帶這個字的情境才會用到。
   const isTimelinePage = () =>
     location.pathname.includes('/boards') &&
     (location.pathname.includes('timeline') ||
      location.search.includes('timeline') ||
      location.hash.includes('timeline') ||
      document.querySelector('[data-testid="software-board.timeline"]') ||
-     document.querySelector('[data-testid="roadmap.timeline-table.main.scrollable-overlay.today-marker.container"]'));
+     document.querySelector('[data-testid^="aais-timeline-toolbar."]') ||
+     document.querySelector('[data-testid="native-issue-table.common.ui.issue-cells.issue-key.issue-key-cell"]'));
   // 供 timeline_color.js 共用同一份判定（manifest 順序：本檔先載入）。
   // 兩處判定曾各寫各的，邊界情況會 toolbar 有出現但染色沒啟用。
   window.__jptIsTimelinePage = isTimelinePage;

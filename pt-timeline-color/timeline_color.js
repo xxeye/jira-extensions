@@ -1,13 +1,15 @@
 // timeline_color.js
 // 在 Jira Timeline 把 Planning Task / Milestone 的時間軸條塊染色
 //
-// Jira Timeline DOM 結構（2026-05 抓的）：
-//   list-item:  [data-testid^="roadmap.timeline-table.components.list-item.container-<ID>"]
-//   chart-item: [data-testid^="roadmap.timeline-table.components.chart-item.container-<ID>"]
-//   bar:        [data-testid="roadmap.timeline-table-kit.ui.chart-item-content.date-content.bar.draggable-bar-<ID>-container"]
-//   key text:   [data-testid="roadmap.timeline-table-kit.ui.list-item-content.summary.key"]
-//
-// <ID> 是 Jira 內部 numeric ID（非 issue key）。list 與 chart 透過 ID 對應。
+// Jira Timeline DOM 結構（2026-08-26 改版後重新實測，取代 2026-05 那版）：
+//   一個 issue = 一張 <table> 裡的一個 <tr>；key/summary/status/assignee/甘特圖
+//   bar 全部是同一列的儲存格，不再有獨立的 list-item / chart-item 兩組虛擬列表
+//   靠數字 ID 互相對應——直接在同一個 <tr> 裡找就好，見 getTimelineRows() /
+//   extractIssueId() / extractIssueKey()。
+//   key text: [data-testid="native-issue-table.common.ui.issue-cells.issue-key.issue-key-cell"]
+//   bar:      [data-testid*="draggable-bar-"][data-testid$="-container"]
+//             （testid 內容形如 ...draggable-bar-ari:cloud:jira:<uuid>:issue/<數字ID>-container）
+// 這次改版詳情、逐項選擇器對照表見同目錄 UI_MIGRATION_2026-08.md。
 //
 // 設定來源：chrome.storage.sync（由 popup.html 寫入）
 //   ptColor    Planning Task 顏色（預設 #6a9a23）
@@ -42,7 +44,6 @@
     showWeekends:      true,         // 時間軸標示週末（六、日）背景條
     showHolidays:      true,         // 時間軸標示台灣國定假日背景條
     showWorkingDays:   true,         // Hover / 拖拉 bar 時，結束日標籤右側顯示工作天數（扣除週末與國定假日）
-    focusMode:         false,        // 展開 Epic 時自動 filter 為該 Epic 與其子任務
   };
   let settings = { ...DEFAULTS };
 
@@ -71,10 +72,34 @@
   const FIELD_START_DATE      = 'customfield_10015';   // Jira Cloud Start Date（給 Milestone hover 顯示日期範圍）
   const FIELD_TARGET_END      = 'customfield_10023'; // Target end date
 
-  // ─── 選擇器 ──────────────────────────────────────────
-  const SEL_LIST_ITEM = '[data-testid^="roadmap.timeline-table.components.list-item.container-"]';
-  const SEL_KEY       = '[data-testid="roadmap.timeline-table-kit.ui.list-item-content.summary.key"]';
-  const SEL_BAR_PREFIX = 'roadmap.timeline-table-kit.ui.chart-item-content.date-content.bar.draggable-bar-';
+  // ─── 選擇器（2026-08 Jira Timeline 改版後重新對應）──────
+  // 舊版：list-item / chart-item 各自帶數字 ID 的獨立 testid，靠 ID 互相對應。
+  // 新版：整個 Timeline 變成一張 <table>，一個 issue = 一個 <tr>，
+  //       key/summary/bar 都是同一個 <tr> 裡的儲存格，不再需要 ID 對應，
+  //       直接在同一列裡找就好。
+  const SEL_KEY = '[data-testid="native-issue-table.common.ui.issue-cells.issue-key.issue-key-cell"]';
+  const SEL_BAR_CONTAINER = '[data-testid*="draggable-bar-"][data-testid$="-container"]';
+
+  // 找目前 Timeline 用的那張 table：優先用 issue key cell 反查（最準），
+  // 找不到（頁面還沒渲染完）就退回抓頁面上第一張有 <thead> 的 table。
+  const getTimelineTable = () =>
+    document.querySelector(SEL_KEY)?.closest('table')
+    || document.querySelector('table:has(thead)')
+    || document.querySelector('table');
+
+  const getTimelineRows = () => {
+    const table = getTimelineTable();
+    return table ? [...table.querySelectorAll('tbody tr')] : [];
+  };
+
+  // bar 的 data-testid 現在長這樣（前綴沒變，但 <ID> 從純數字換成完整 ARI）：
+  //   roadmap.timeline-table-kit.ui.chart-item-content.date-content.bar.draggable-bar-ari:cloud:jira:<uuid>:issue/<數字ID>-container
+  // 我們只在乎結尾的數字 issue id，用「結尾符合」選取器直接比對，不用管中間的 uuid。
+  const extractIssueIdFromBar = (bar) => {
+    const m = (bar?.getAttribute('data-testid') || '').match(/issue\/(\d+)-container$/);
+    return m ? m[1] : null;
+  };
+  const findBarById = (id) => document.querySelector(`[data-testid$="issue/${id}-container"]`);
 
   // ─── Cache（拆兩層 — 大幅減少 API 呼叫）─────────────────
   //
@@ -154,12 +179,64 @@
     document.body?.classList.toggle('jpt-pt-lock-drag', !!settings.ptLockDrag && !!settings.enabled);
     // Epic 鎖定拖曳/拉長
     document.body?.classList.toggle('jpt-epic-lock-drag', !!settings.epicLockDrag && !!settings.enabled);
+    // 「目前時段」高亮：不是靜態 CSS 規則了，設定一變就重新找一次目標欄位
+    try { applyCurrentPeriodHide(); } catch {}
   };
 
   // ─── 週末/假日 strip 渲染（universal：支援週/月/季 view）───
   const STRIP_CLASS = 'jpt-cal-strip';
-  const SEL_HEADER_ROW = '[data-testid="roadmap.timeline-table.main.header.sub-header-default_header_row"]';
-  const SEL_TODAY_MARKER = '[data-testid="roadmap.timeline-table.main.scrollable-overlay.today-marker.container"]';
+
+  // 2026-08 改版後這兩個 testid 都消失了，改用結構/幾何特徵抓：
+  //   header row → table 的 <thead><tr>，最後一個儲存格就是甘特圖表頭
+  //   （工作/狀態/受託人在前面幾格，甘特圖表頭固定是最後一個）
+  //   today marker → 全頁掃 <div>，找「窄（≤4px）+ 高（>300px）+ 實色背景」的
+  //   那個（原本的 testid 保護沒了，抓到後 cache 住，元素被移出 DOM 才重新掃，
+  //   避免每次呼叫都全頁掃一輪 div）
+  const getHeaderRow = () => {
+    const headerTr = getTimelineTable()?.querySelector('thead tr');
+    return headerTr ? headerTr.lastElementChild : null;
+  };
+
+  let cachedTodayMarker = null;
+  const findTodayMarker = () => {
+    if (cachedTodayMarker && cachedTodayMarker.isConnected) return cachedTodayMarker;
+    cachedTodayMarker = [...document.querySelectorAll('div')].find(el => {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.width > 4 || r.height < 300) return false;
+      const bg = getComputedStyle(el).backgroundColor;
+      return bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent';
+    }) || null;
+    return cachedTodayMarker;
+  };
+
+  // ─── 隱藏「目前時段」高亮（2026-08 改版後重新對應）──────
+  // 舊版純 CSS 寫死雜湊 class：body.jpt-hide-current-month ._1kl7ia51._1s7zia51
+  // 新版沒有雜湊 class 可預先寫死了，但這次改版意外地讓這格「有 testid 了」：
+  // 一組 [data-testid^="timeline.chart-overlays.columns-overlay.column-N"]
+  // 裡，背景不透明的那一個就是目前高亮的月/週/季欄。用 JS 動態找到它，直接在
+  // 該元素上加 class 蓋掉背景（取代原本寫死選擇器的 CSS 規則）。
+  const SEL_COLUMN_OVERLAY = '[data-testid^="timeline.chart-overlays.columns-overlay.column-"]';
+  const CURRENT_PERIOD_HIDE_CLASS = 'jpt-current-period-hidden';
+  // 實測發現：同一個 column-N testid 在 DOM 裡其實有「兩份」——一份活在
+  // <thead> 底下（尺寸只有 header cell 高，通常background transparent，
+  // 是虛擬化/複用機制留下的殘影節點）、另一份活在 table 外層的
+  // chart-overlays.container（真正貫穿 header+body 整欄高度的那個，才是
+  // 畫面上實際看得到的高亮）。哪一份「目前是非透明」會隨著虛擬化/捲動變化，
+  // 舊版「找到第一個非透明的就 break」的寫法，遇到捲動那個瞬間可能剛好抓到
+  // thead 那份短命的殘影，把 hide class 蓋在錯的節點上，結果真正畫在畫面上
+  // 的欄位反而沒被隱藏——使用者看到的就是「標頭那格看起來被處理過，但下面
+  // 整欄的高亮還在」。改成不 break、每次重新整理全部符合條件的節點，並且
+  // 每次都先清掉舊的 hide class 再重算，才不會被虛擬化的殘影節點誤導。
+  const applyCurrentPeriodHide = () => {
+    document.querySelectorAll(`.${CURRENT_PERIOD_HIDE_CLASS}`).forEach(el => el.classList.remove(CURRENT_PERIOD_HIDE_CLASS));
+    if (!settings.enabled || !settings.hideCurrentMonth) return;
+    for (const col of document.querySelectorAll(SEL_COLUMN_OVERLAY)) {
+      const bg = getComputedStyle(col).backgroundColor;
+      if (bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+        col.classList.add(CURRENT_PERIOD_HIDE_CLASS);
+      }
+    }
+  };
 
   const MONTH_NAMES = {
     January:1, February:2, March:3, April:4, May:5, June:6,
@@ -176,14 +253,29 @@
   };
   const daysInMonth = (year, month) => new Date(year, month, 0).getDate();
 
+  // 舊版讀 URL ?timeline=WEEKS|MONTHS|QUARTERS；2026-08 改版後 URL 不再帶這個
+  // 參數（純前端 state，實測切視圖 URL 完全不變），改成讀「週/月/季」三顆切換
+  // 按鈕，找目前背景不透明（= 被選中）的那顆，用按鈕文字對應模式。
+  // 文字依站台語系而定，中英文都收（比照 EPIC_TYPE_NAMES 的雙語處理方式）。
+  const MODE_BUTTON_LABELS = {
+    '週': 'WEEKS', '周': 'WEEKS', 'Weeks': 'WEEKS', 'Week': 'WEEKS',
+    '月': 'MONTHS', 'Months': 'MONTHS', 'Month': 'MONTHS',
+    '季': 'QUARTERS', 'Quarters': 'QUARTERS', 'Quarter': 'QUARTERS',
+  };
+  const SEL_MODE_SWITCHER_BUTTON = '[data-testid="aais-timeline-toolbar.ui.timeline-mode-switcher.expand-button"]';
   const getTimelineMode = () => {
-    const m = new URL(location.href).searchParams.get('timeline')?.toUpperCase();
-    return m || 'MONTHS';  // 預設月視圖
+    for (const b of document.querySelectorAll(SEL_MODE_SWITCHER_BUTTON)) {
+      const bg = getComputedStyle(b).backgroundColor;
+      if (bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') continue;   // 沒被選中
+      const label = MODE_BUTTON_LABELS[b.textContent.trim()];
+      if (label) return label;
+    }
+    return 'MONTHS';  // 找不到就退回月視圖（維持舊版預設行為）
   };
 
   // 從第一個能解析的 header cell 算出 px-per-day
   const computePxPerDay = (mode) => {
-    const headerRow = document.querySelector(SEL_HEADER_ROW);
+    const headerRow = getHeaderRow();
     if (!headerRow) return null;
     const cells = [];
     headerRow.querySelectorAll('div').forEach(d => {
@@ -209,14 +301,19 @@
 
   let lastStripSig = '';
   const drawHolidayStrips = () => {
-    const today = document.querySelector(SEL_TODAY_MARKER);
+    // 目前時段高亮跟週末/假日 strip 都是「每輪 timeline 幾何變動就要重算」的
+    // 同一類工作，改版後兩者的錨點都不穩了，收在同一個入口一起處理。
+    try { applyCurrentPeriodHide(); } catch {}
+    const today = findTodayMarker();
     if (!today) return;
     const parent = today.parentElement;
 
     const wantWeekends = !!settings.showWeekends;
     const wantHolidays = !!settings.showHolidays;
     if (!wantWeekends && !wantHolidays) {
-      parent.querySelectorAll(`.${STRIP_CLASS}`).forEach(el => el.remove());
+      // 全域清除，不只清 parent 底下的——見下方主流程註解，parent 這個參考
+      // 會隨虛擬化換人，只清當下這份會漏掉舊 parent 底下的殘留 strip。
+      document.querySelectorAll(`.${STRIP_CLASS}`).forEach(el => el.remove());
       lastStripSig = '';
       return;
     }
@@ -241,10 +338,18 @@
 
     // signature：mode + cell 寬 + today 位置 + 範圍 + 選項
     const sig = `${mode}|${cells.length}|${cells[0].rect.width.toFixed(1)}|${todayParentX}|${startOffset}|${endOffset}|${wantWeekends?1:0}${wantHolidays?1:0}`;
-    if (sig === lastStripSig && parent.querySelector(`.${STRIP_CLASS}`)) return;
+    if (sig === lastStripSig && document.querySelector(`.${STRIP_CLASS}`)) return;
     lastStripSig = sig;
 
-    parent.querySelectorAll(`.${STRIP_CLASS}`).forEach(el => el.remove());
+    // 實測：today-marker 是用幾何特徵動態掃出來、加了快取的（findTodayMarker），
+    // 一旦舊的快取節點被虛擬化機制回收/替換，today.parentElement 也會換成
+    // 「另一份」節點（跟 column-overlay 的殘影問題同一個成因：這層 overlay
+    // 容器本身也會被複製/回收）。舊寫法只清「這次的 parent」底下的 strip，
+    // 换過 parent 後，舊 parent 底下那些 strip 就變成永遠沒人清的孤兒，越積
+    // 越多（實測一次找到 358 個），而且很多孤兒剛好卡在過期的捲動位置，會
+    // 跟目前畫面上的 bar 疊在一起，看起來像是「層級蓋到時間塊上面」。改成
+    // 全域清除，確保每次重畫前，畫面上真的只剩「這一輪」畫的 strip。
+    document.querySelectorAll(`.${STRIP_CLASS}`).forEach(el => el.remove());
 
     const frag = document.createDocumentFragment();
     for (let off = startOffset; off <= endOffset; off++) {
@@ -273,95 +378,10 @@
   };
 
   const clearHolidayStrips = () => {
-    const today = document.querySelector(SEL_TODAY_MARKER);
-    today?.parentElement?.querySelectorAll(`.${STRIP_CLASS}`).forEach(el => el.remove());
+    // 同上：全域清除，不要只看目前這個 today 節點的 parent（可能已經不是
+    // 當初畫 strip 時的那份節點了）。
+    document.querySelectorAll(`.${STRIP_CLASS}`).forEach(el => el.remove());
     lastStripSig = '';
-  };
-
-  // ─── Focus Mode ─────────────────────────────────────
-  // 偵測哪個 Epic 被展開（aria-expanded="true"），直接改 URL ?issueParent=<id>
-  // 觸發 Jira 內建篩選機制 — 不模擬 dropdown 點擊，避免 UI 干擾。
-  // Jira tree 允許多個 Epic 同時展開。由 MutationObserver 記住真正從
-  // aria-expanded=false 變成 true 的項目，不能用 DOM 順序猜最新展開項目。
-  let lastExpandedEpicId = null;
-  const findExpandedEpicItem = () => {
-    const items = document.querySelectorAll(SEL_LIST_ITEM);
-    let first = null;
-    let current = null;
-    for (const item of items) {
-      if (!item.querySelector('[aria-expanded="true"]')) continue;
-      if (!first) first = item;
-      const id = extractIssueId(item);
-      if (id === lastExpandedEpicId) return item;
-      if (id === myFilterId) current = item;
-    }
-    return current || first;
-  };
-
-  const getUrlIssueParent = () =>
-    new URL(location.href).searchParams.get('issueParent');
-
-  // 透過 history.replaceState + popstate 事件改 URL，Jira React router 會自動 react。
-  // 用 replaceState 而非 pushState：每次展開 Epic 都 push 會把歷史塞滿 filter 項，
-  // 且按「上一頁」後 updateFocus 會立刻把 filter 寫回去 — 等於上一頁失效。
-  const setUrlIssueParent = (idOrNull) => {
-    const url = new URL(location.href);
-    if (idOrNull) url.searchParams.set('issueParent', idOrNull);
-    else url.searchParams.delete('issueParent');
-    if (url.toString() === location.href) return;
-    history.replaceState(history.state, '', url.toString());
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  };
-
-  // 我們最後寫進 URL 的 issueParent — 用來分辨自設 vs 使用者手動改
-  let myFilterId = null;
-
-  let updateFocusTimer = null;
-  // 用「leading throttle」而非 debounce — 第一次呼叫後 350ms 必觸發
-  // 不要每次都 clearTimeout，否則持續 mutation 下永遠等不到
-  const scheduleUpdateFocus = () => {
-    if (updateFocusTimer) return;
-    updateFocusTimer = setTimeout(() => {
-      updateFocusTimer = null;
-      updateFocus();
-    }, 350);
-  };
-
-  const updateFocus = () => {
-    // 防呆：插件停用時，已排隊的 scheduleUpdateFocus 不能再回頭設 URL filter
-    // 否則會在 stopActive 之後又把 issueParent 寫回去
-    if (!settings.enabled) return;
-    if (!settings.focusMode) {
-      // 關掉 focus mode → 只清掉「我們設過的」filter，不動使用者手動設的
-      if (myFilterId && getUrlIssueParent() === myFilterId) setUrlIssueParent(null);
-      myFilterId = null;
-      return;
-    }
-
-    // 開啟 focus mode → URL filter 完全由展開狀態決定，覆蓋使用者手動選擇
-    const expanded = findExpandedEpicItem();
-    const expandedId = expanded ? extractIssueId(expanded) : null;
-
-    // 防虛擬列表誤觸：Jira timeline 的 list 會把不在渲染範圍內的 list-item 從 DOM 卸載。
-    // 若沒找到展開的 Epic，但我們先前已 focus 某個 Epic，檢查那個 Epic 的 list-item
-    // 是否還在 DOM。不在（被虛擬化）→ 保持 filter（只是滑出畫面而非真的收合）。
-    if (!expandedId && myFilterId) {
-      const previousItem = document.querySelector(
-        `[data-testid="roadmap.timeline-table.components.list-item.container-${myFilterId}"]`
-      );
-      if (!previousItem) return;
-      // list-item 還在 DOM 但 aria-expanded 不是 true → 真的被收合，繼續往下走清掉
-    }
-
-    if (expandedId !== getUrlIssueParent()) {
-      setUrlIssueParent(expandedId);
-    }
-    myFilterId = expandedId;
-  };
-
-  const clearFocus = () => {
-    if (myFilterId && getUrlIssueParent() === myFilterId) setUrlIssueParent(null);
-    myFilterId = null;
   };
 
   // ─── 方向鍵左右捲動時間軸 ─────────────────────────
@@ -381,7 +401,9 @@
     // 修飾鍵（除 Shift）放行給瀏覽器/Jira
     if (e.altKey || e.ctrlKey || e.metaKey) return;
 
-    const scroller = document.querySelector('[data-testid="sr-timeline"]');
+    // 舊 testid「sr-timeline」2026-08 改版後也消失了，實測新版捲動容器換成
+    // scroll-container.scroll-container。
+    const scroller = document.querySelector('[data-testid="scroll-container.scroll-container"]');
     if (!scroller) return;
 
     const step = e.shiftKey ? SCROLL_BIG : SCROLL_STEP;
@@ -424,16 +446,15 @@
         if (changes.showHolidays !== undefined) settings.showHolidays = !!(changes.showHolidays.newValue);
         if (changes.showWorkingDays !== undefined) settings.showWorkingDays = !!(changes.showWorkingDays.newValue);
         // arrowScroll 已固化為預設行為，不再從 storage 讀取
-        if (changes.focusMode !== undefined) settings.focusMode = !!(changes.focusMode.newValue);
         applyCssVars();
         if (changes.enabled !== undefined) {
           // 開關切換 → 重新評估啟用 + 強制重渲染（防 F5 後狀態卡住）
           updateActivation();
-          if (settings.enabled) { rerenderAll(); drawHolidayStrips(); scheduleUpdateFocus(); }
+          if (settings.enabled) { rerenderAll(); drawHolidayStrips(); }
         } else if (settings.enabled) {
           // 其他設定變動只在啟用時重渲染；停用時不能因任意 storage 寫入觸發畫面
           // （例如 jpt-toolbar-pos 拖曳會寫 storage，但不該重畫畫面）
-          rerenderAll(); drawHolidayStrips(); scheduleUpdateFocus();
+          rerenderAll(); drawHolidayStrips();
           if (changes.ptTargetEndShade !== undefined && settings.ptTargetEndShade) scheduleScan();
         }
       } else if (area === 'local' && changes.cacheBuster) {
@@ -455,16 +476,15 @@
   } catch {}
 
   // ─── 抽 ID / Key ────────────────────────────────────
-  const extractIssueId = (listItem) => {
-    const m = (listItem.getAttribute('data-testid') || '').match(/container-(\d+)/);
-    return m ? m[1] : null;
-  };
-  const extractIssueKey = (listItem) => {
-    const keyEl = listItem.querySelector(SEL_KEY);
+  // row 現在就是 <tr>：key 直接在同一列裡找；id 則從同一列裡的 bar 反推
+  // （bar 不一定存在——例如任務沒填日期就不會有 bar，這時 id 會是 null，
+  //   跟舊版「這個 issue 沒東西可上色」的行為一致）。
+  // findBarById 定義移到檔案上方的選擇器區塊，跟 extractIssueIdFromBar 放一起。
+  const extractIssueId = (row) => extractIssueIdFromBar(row.querySelector(SEL_BAR_CONTAINER));
+  const extractIssueKey = (row) => {
+    const keyEl = row.querySelector(SEL_KEY);
     return keyEl?.textContent?.trim() || null;
   };
-  const findBarById = (id) =>
-    document.querySelector(`[data-testid="${SEL_BAR_PREFIX}${id}-container"]`);
 
   // ─── Milestone 進度 badge ──────────────────────────
   const progressColorTier = (pct) => {
@@ -579,9 +599,9 @@
   // ─── 全頁重渲染（settings 變動時呼叫）──────────────
   const rerenderAll = () => {
     if (!settings.enabled) return;  // 防呆：停用時絕不上色
-    document.querySelectorAll(SEL_LIST_ITEM).forEach(item => {
-      const id = extractIssueId(item);
-      const key = extractIssueKey(item);
+    getTimelineRows().forEach(row => {
+      const id = extractIssueId(row);
+      const key = extractIssueKey(row);
       if (id && key) applyColor(id, key);
     });
   };
@@ -739,8 +759,8 @@
 
   const scan = async () => {
     if (!settings.enabled) return;  // 防呆：停用時不掃描（含 cacheBuster / 殘留 timer）
-    const listItems = document.querySelectorAll(SEL_LIST_ITEM);
-    if (DEBUG) console.log(`[jpt] scan: ${listItems.length} list-items`);
+    const listItems = getTimelineRows();
+    if (DEBUG) console.log(`[jpt] scan: ${listItems.length} rows`);
     if (!listItems.length) {
       // F5 後 Jira 渲染慢、或 filter 套用時 DOM 暫時空 — 排程一次延遲重試
       if (!scanRetryTimer) {
@@ -1035,7 +1055,7 @@
 
     // ── 後備：label 解析失敗（語系沒命中 / 拖拉中只剩「+N 天」delta）
     //    回頭用 bar 幾何推 — 已知會 ±1 漂，但總比沒有強
-    const today = document.querySelector(SEL_TODAY_MARKER);
+    const today = findTodayMarker();
     if (!today) return null;
     const computed = computePxPerDay(getTimelineMode());
     if (!computed) return null;
@@ -1130,11 +1150,11 @@
 
   document.addEventListener('mouseover', (e) => {
     if (!settings.enabled) return;
-    const bar = e.target.closest?.('[data-testid*="draggable-bar-"][data-testid$="-container"]');
+    const bar = e.target.closest?.(SEL_BAR_CONTAINER);
     if (!bar) return;
-    const m = (bar.getAttribute('data-testid') || '').match(/draggable-bar-(\d+)-container/);
-    if (!m) return;
-    const key = idToKey.get(m[1]);
+    const id = extractIssueIdFromBar(bar);
+    if (!id) return;
+    const key = idToKey.get(id);
     if (!key) return;
     showHoverTip(bar, key);
     // Milestone 菱形 → 砍掉「(N 天)」後綴。等下個 frame 讓 Jira 先渲染 label
@@ -1169,9 +1189,9 @@
       dragStart = null;
       return;
     }
-    const m = (bar.getAttribute('data-testid') || '').match(/draggable-bar-(\d+)-container/);
-    if (!m) return;
-    dragStart = { x: e.clientX, y: e.clientY, id: m[1], key: idToKey.get(m[1]) };
+    const id = extractIssueIdFromBar(bar);
+    if (!id) return;
+    dragStart = { x: e.clientX, y: e.clientY, id, key: idToKey.get(id) };
     // 鎖住 wd overlay：這段期間 cursor 可能滑出 bar（resize / 整段拖），都要保留 overlay
     wdDragLocked = true;
   }, true);
@@ -1220,17 +1240,22 @@
   // Jira virtualizer 對 list-item（左欄）跟 bar（右欄 chart-item）的 DOM 進出
   // 不一定同 batch — Epic 預設色比較顯眼，bar 進場若沒立刻套色就會閃實心。
   // 兩條路徑都攔：list-item 進場 → 從 list-item 解 id/key；bar 進場 → 經 idToKey 反查。
-  const SEL_BAR_CONTAINER = '[data-testid*="draggable-bar-"][data-testid$="-container"]';
   const applyCachedColorToAddedItems = (mutations) => {
     if (!settings.enabled) return;
     if (!mutations) return;  // startActive 首次手動呼叫沒帶參數 → 走全頁 scan 即可
+    // 新版每個 issue 是同一張 table 裡的 <tr>，MutationObserver 觀察整個
+    // document.body，用「屬於同一張 timeline table」限定，避免誤吃頁面上
+    // 其他不相關的 <tr>（例如彈出視窗裡剛好也有表格）。
+    const table = getTimelineTable();
+    if (!table) return;
+    const isOurRow = (n) => n.tagName === 'TR' && n.closest('table') === table;
     const addedItems = new Set();
     const addedBars  = new Set();
     for (const m of mutations) {
       for (const node of m.addedNodes) {
         if (node.nodeType !== 1) continue;
-        if (node.matches?.(SEL_LIST_ITEM)) addedItems.add(node);
-        node.querySelectorAll?.(SEL_LIST_ITEM).forEach(n => addedItems.add(n));
+        if (isOurRow(node)) addedItems.add(node);
+        node.querySelectorAll?.('tr').forEach(n => { if (isOurRow(n)) addedItems.add(n); });
         if (node.matches?.(SEL_BAR_CONTAINER)) addedBars.add(node);
         node.querySelectorAll?.(SEL_BAR_CONTAINER).forEach(b => addedBars.add(b));
       }
@@ -1241,9 +1266,8 @@
       if (id && key && typeCache.has(key)) applyColor(id, key);
     }
     for (const bar of addedBars) {
-      const mm = (bar.getAttribute('data-testid') || '').match(/draggable-bar-(\d+)-container/);
-      if (!mm) continue;
-      const id = mm[1];
+      const id = extractIssueIdFromBar(bar);
+      if (!id) continue;
       const key = idToKey.get(id);  // 之前 scan 過就有；首次見的 issue 等 fetch 完才上色
       if (key && typeCache.has(key)) applyColor(id, key);
     }
@@ -1256,17 +1280,9 @@
     stripTimer = setTimeout(() => { stripTimer = null; drawHolidayStrips(); }, 200);
   };
   const onMutation = (mutations) => {
-    for (const mutation of mutations || []) {
-      if (mutation.type !== 'attributes' || mutation.attributeName !== 'aria-expanded') continue;
-      if (mutation.target.getAttribute('aria-expanded') !== 'true') continue;
-      const item = mutation.target.closest?.(SEL_LIST_ITEM);
-      const id = item ? extractIssueId(item) : null;
-      if (id) lastExpandedEpicId = id;
-    }
     applyCachedColorToAddedItems(mutations);
     scheduleScan();
     scheduleDrawHolidayStrips();
-    scheduleUpdateFocus();
   };
   const startActive = () => {
     if (domObserver) return;
@@ -1278,7 +1294,7 @@
     applyCssVars();
     onMutation();
     domObserver = new MutationObserver(onMutation);
-    domObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-expanded'] });
+    domObserver.observe(document.body, { childList: true, subtree: true });
   };
   const stopActive = () => {
     if (DEBUG) console.log('[jpt] deactivate');
@@ -1297,7 +1313,6 @@
     // 取消已排隊但尚未執行的 timer，避免它們在 stopActive 之後跑回頭重畫
     if (scanTimer) { clearTimeout(scanTimer); scanTimer = null; }
     if (scanRetryTimer) { clearTimeout(scanRetryTimer); scanRetryTimer = null; }
-    if (updateFocusTimer) { clearTimeout(updateFocusTimer); updateFocusTimer = null; }
     if (stripTimer) { clearTimeout(stripTimer); stripTimer = null; }
     // 即使 observer 沒在跑，也要把殘留的 class / badge 清乾淨（停用時務必收尾）
     document.querySelectorAll(`.${PT_CLASS}, .${MS_CLASS}, .${DIA_CLASS}, .${EPIC_HIGHLIGHT_CLASS}`).forEach(el => {
@@ -1307,7 +1322,6 @@
     if (hoverTipEl) hoverTipEl.style.display = 'none';
     stopWdLoop();
     clearHolidayStrips();
-    clearFocus();
   };
   const updateActivation = () => {
     if (settings.enabled && isTimelinePage()) startActive();
@@ -1373,7 +1387,9 @@
       });
       console.log('[jpt] both caches cleared');
     },
-    // Jira UI 改版時用這個重新找「當月份高亮欄」的 class
+    // 舊版（2026-05 之前）用這個重新找「當月份高亮欄」的雜湊 class。
+    // 2026-08 改版後這格已經有 testid 了（見 findCurrentPeriodColumn），
+    // 這支留著備用 — 萬一哪天 testid 又被拿掉，還能回頭用這招掃。
     findCurrentMonthClass: () => {
       const result = [...document.querySelectorAll('div')]
         .filter(el => {
@@ -1386,6 +1402,18 @@
       console.table(result);
       return result;
     },
+    // 2026-08 改版後的等價工具：直接列出所有 column-overlay，標出哪個背景不透明
+    findCurrentPeriodColumn: () => {
+      const result = [...document.querySelectorAll(SEL_COLUMN_OVERLAY)].map(el => {
+        const r = el.getBoundingClientRect();
+        return { testid: el.getAttribute('data-testid'), bg: getComputedStyle(el).backgroundColor, w: Math.round(r.width) };
+      });
+      console.table(result);
+      return result;
+    },
+    findTodayMarker,
+    getTimelineTable,
+    getTimelineRows: () => getTimelineRows().length,
   };
 
   init();

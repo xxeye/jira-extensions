@@ -16,7 +16,6 @@ const DEFAULTS = {
   showWeekends:      true,
   showHolidays:      true,
   showWorkingDays:   true,
-  focusMode:         false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -36,7 +35,6 @@ const els = {
   showWeekends:     $('show-weekends'),
   showHolidays:     $('show-holidays'),
   showWorkingDays:  $('show-working-days'),
-  focusMode:        $('focus-mode'),
   reset:            $('reset'),
   status:           $('status'),
 };
@@ -68,7 +66,6 @@ const load = async () => {
   els.showWeekends.checked     = !!cfg.showWeekends;
   els.showHolidays.checked     = !!cfg.showHolidays;
   els.showWorkingDays.checked  = !!cfg.showWorkingDays;
-  els.focusMode.checked        = !!cfg.focusMode;
 };
 
 const writeSettings = async () => {
@@ -87,7 +84,6 @@ const writeSettings = async () => {
     showWeekends:     els.showWeekends.checked,
     showHolidays:     els.showHolidays.checked,
     showWorkingDays:  els.showWorkingDays.checked,
-    focusMode:        els.focusMode.checked,
   });
   showStatus('已儲存');
 };
@@ -127,7 +123,6 @@ els.hideIssueKey.addEventListener('change', writeSettings);
 els.showWeekends.addEventListener('change', writeSettings);
 els.showHolidays.addEventListener('change', writeSettings);
 els.showWorkingDays.addEventListener('change', writeSettings);
-els.focusMode.addEventListener('change', writeSettings);
 
 els.reset.addEventListener('click', async () => {
   clearTimeout(saveDebounceTimer);   // 取消排隊中的舊值寫入，避免蓋掉 reset

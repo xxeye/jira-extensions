@@ -14,3 +14,9 @@ AGENTS.md
 
 # Confluence 內部版文件（給內部員工，不上公開 repo）
 docs/confluence/
+docs/superpowers/
+
+# 測試文件
+tests/
+template-cloner/
+_to_delete/

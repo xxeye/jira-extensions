@@ -34,7 +34,6 @@ Jira Timeline 視覺強化插件 — 為 Planning Task / Milestone / Epic 加上
 | 時間軸介面 | 標示週末 | OFF | 六、日欄淡灰 |
 | 時間軸介面 | 標示台灣國定假日 | OFF | 內建 2025–2027 假日，淡橘 |
 | 時間軸介面 | Hover/拖拉顯示工作天數 | OFF | 結束日標籤加「(工作天 X 天)」，自動扣掉週末與國定假日 |
-| 專注模式 | 展開 Epic 自動篩選 | OFF | 展開 Epic 時自動只顯示該 Epic 與子任務，收合或關閉時還原 |
 
 底部「**重設預設**」按鈕：把所有設定還原為上表預設值。
 
@@ -120,15 +119,6 @@ Milestone 是「時間點」而非「時間區間」，本插件提供四個強�
 
 ![相依性線 — 原生（粗實線、密集）](img/jpt-10a-dep-line-before.png)
 ![相依性線 — 優化後（細淡線、整齊）](img/jpt-10b-dep-line-after.png)
-
----
-
-### 專注模式
-
-展開任一 Epic 時自動只顯示該 Epic 與子任務（Jira 內建 Epic 篩選）。收合或關閉時還原。
-
-![專注模式展開前後](img/jpt-11-focus-mode.png)
-![專注模式展開前後](img/jpt-11-focus-mode2.png)
 
 ---
 
